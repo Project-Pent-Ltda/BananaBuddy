@@ -16,7 +16,7 @@ export type BananeiraMember = {
   score: number
 }
 
-function sportSessionsTotal(practiced: Record<string, number> | null): number {
+export function sportSessionsTotal(practiced: Record<string, number> | null): number {
   if (!practiced) return 0
   return Object.values(practiced).reduce((a, b) => a + b, 0)
 }

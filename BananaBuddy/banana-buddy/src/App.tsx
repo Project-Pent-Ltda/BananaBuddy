@@ -24,6 +24,7 @@ import {
   sendPoke,
   fetchUnseenPokes,
   markPokesSeen,
+  sportSessionsTotal,
   type BananeiraOverview,
   type BananeiraMember,
 } from "@/lib/bananeiras";
@@ -766,18 +767,33 @@ const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, on
   );
 };
 
-type MapBanana = BananeiraMember & { x: number; y: number; duration: number };
+type MapBanana = BananeiraMember & { x: number; y: number; wobbleX: number; wobbleY: number; duration: number };
 
-const BananeiraMapScreen = ({ onBack, bananeiraId, bananeiraName, currentUserId }: { onBack: () => void, bananeiraId: string, bananeiraName: string, currentUserId: string }) => {
+const BananeiraMapScreen = ({
+  onBack, bananeiraId, bananeiraName, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore,
+  practicedSports, updateProgress
+}: {
+  onBack: () => void, bananeiraId: string, bananeiraName: string, currentUserId: string,
+  currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number,
+  practicedSports: Record<string, number>, updateProgress: (id: string, amt: number) => void
+}) => {
   const [selectedBanana, setSelectedBanana] = useState<MapBanana | null>(null);
   const [members, setMembers] = useState<BananeiraMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [pokeStatus, setPokeStatus] = useState<string>("");
-  const [positions] = useState(() => new Map<string, { x: number; y: number; duration: number }>());
+  const [showRegister, setShowRegister] = useState(false);
+  const [positions] = useState(() => new Map<string, { x: number; y: number; wobbleX: number; wobbleY: number; duration: number }>());
 
   const positionFor = (userId: string) => {
     if (!positions.has(userId)) {
-      positions.set(userId, { x: 20 + Math.random() * 60, y: 20 + Math.random() * 50, duration: 20 + Math.random() * 20 });
+      const x = 20 + Math.random() * 60;
+      const y = 20 + Math.random() * 50;
+      positions.set(userId, {
+        x, y,
+        wobbleX: Math.min(90, Math.max(10, x + Math.random() * 40 - 20)),
+        wobbleY: Math.min(85, Math.max(10, y + Math.random() * 40 - 20)),
+        duration: 20 + Math.random() * 20,
+      });
     }
     return positions.get(userId)!;
   };
@@ -789,7 +805,14 @@ const BananeiraMapScreen = ({ onBack, bananeiraId, bananeiraName, currentUserId 
 
   useEffect(() => { refresh(); }, [bananeiraId]);
 
-  const mapBananas: MapBanana[] = members.map((m) => ({ ...m, ...positionFor(m.userId) }));
+  const liveMembers: BananeiraMember[] = members
+    .map((m) =>
+      m.userId === currentUserId
+        ? { ...m, name: currentUserName, skin: currentUserSkin, isOnFire: currentUserIsOnFire, score: currentUserScore }
+        : m
+    )
+    .sort((a, b) => b.score - a.score);
+  const mapBananas: MapBanana[] = liveMembers.map((m) => ({ ...m, ...positionFor(m.userId) }));
 
   const handlePoke = async (member: BananeiraMember) => {
     setPokeStatus("Enviando...");
@@ -816,15 +839,20 @@ const BananeiraMapScreen = ({ onBack, bananeiraId, bananeiraName, currentUserId 
           <div className="text-[10px] uppercase tracking-[2px] text-banana font-bold">Mapa Ativo</div>
           <div className="font-display font-bold text-white">{bananeiraName}</div>
         </div>
-        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={refresh}>
-          <Zap className="w-5 h-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => setShowRegister(true)}>
+            <Plus className="w-5 h-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={refresh}>
+            <Zap className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
 
       <div className="relative z-20 px-6 pb-2">
         <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Ranking (sessões)</h4>
         <div className="flex flex-col gap-1">
-          {members.map((m, i) => (
+          {liveMembers.map((m, i) => (
             <div key={m.userId} className="flex items-center justify-between text-xs bg-white/5 rounded-lg px-3 py-1.5">
               <span className="font-bold text-white/80">#{i + 1} {m.name} {m.userId === currentUserId && "(Você)"}</span>
               <span className="text-banana font-bold">{m.score}</span>
@@ -834,15 +862,15 @@ const BananeiraMapScreen = ({ onBack, bananeiraId, bananeiraName, currentUserId 
         {pokeStatus && <div className="text-[10px] text-banana font-bold mt-2">{pokeStatus}</div>}
       </div>
 
-      <div className="flex-1 relative z-10 w-full h-full">
+      <div className="flex-1 relative z-10 w-full h-full overflow-hidden">
         {loading && <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">Carregando membros...</div>}
         {mapBananas.map((b) => (
           <motion.div
             key={b.userId}
             initial={{ left: `${b.x}%`, top: `${b.y}%` }}
             animate={{
-              left: [`${b.x}%`, `${Math.max(10, (b.x + Math.random() * 40 - 20))}%`, `${b.x}%`],
-              top: [`${b.y}%`, `${Math.max(10, (b.y + Math.random() * 40 - 20))}%`, `${b.y}%`]
+              left: [`${b.x}%`, `${b.wobbleX}%`, `${b.x}%`],
+              top: [`${b.y}%`, `${b.wobbleY}%`, `${b.y}%`]
             }}
             transition={{ duration: b.duration, repeat: Infinity, ease: "easeInOut" }}
             className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer z-10"
@@ -887,6 +915,47 @@ const BananeiraMapScreen = ({ onBack, bananeiraId, bananeiraName, currentUserId 
             </motion.div>
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {showRegister && (
+            <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="absolute bottom-6 left-6 right-6 z-30">
+              <div className="bg-[#111] border border-white/10 rounded-[24px] p-5 shadow-2xl relative overflow-hidden max-h-[60vh] overflow-y-auto">
+                <Button size="icon" variant="ghost" className="absolute top-2 right-2 w-8 h-8 rounded-full text-white/40 hover:text-white z-10" onClick={() => setShowRegister(false)}>
+                  ✕
+                </Button>
+                <h3 className="font-display text-lg font-bold text-white mb-3">Registrar treino</h3>
+                {Object.keys(practicedSports).length === 0 && (
+                  <p className="text-xs text-white/30 italic">Nenhum esporte ativo no momento.</p>
+                )}
+                <div className="flex flex-col gap-2">
+                  {Object.entries(practicedSports).map(([id, prog]) => {
+                    const sport = availableSports.find((s) => s.id === id);
+                    if (!sport) return null;
+                    const isComplete = prog >= sport.target;
+                    return (
+                      <div key={id} className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{sport.icon}</span>
+                          <div>
+                            <div className="text-sm font-bold text-white">{sport.name}</div>
+                            <div className="text-[10px] text-banana uppercase tracking-widest">
+                              {isComplete ? "Concluído" : `${prog} / ${sport.target} ${sport.unit}`}
+                            </div>
+                          </div>
+                        </div>
+                        {!isComplete && (
+                          <Button size="sm" onClick={() => updateProgress(id, 1)} className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> 1 sessão
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -907,7 +976,8 @@ export default function App() {
   const [pokeToast, setPokeToast] = useState<string>("");
 
   const loadProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (error) console.error('loadProfile failed:', error);
     if (data) {
       setBuddyName(data.buddy_name ?? '');
       setActiveSkin(data.active_skin ?? 'base');
@@ -943,19 +1013,26 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const saveProfileNow = (overrides: Partial<{
+    practicedSports: Record<string, number>; raios: number;
+  }> = {}) => {
+    if (!user) return;
+    supabase.from('profiles').upsert({
+      id: user.id,
+      buddy_name: buddyName,
+      active_skin: activeSkin,
+      is_on_fire: isOnFire,
+      practiced_sports: overrides.practicedSports ?? practicedSports,
+      raios: overrides.raios ?? raios,
+      unlocked_store_skins: unlockedStoreSkins,
+    }).then(({ error }) => {
+      if (error) console.error('saveProfileNow failed:', error);
+    });
+  };
+
   useEffect(() => {
     if (!user || !profileLoaded) return;
-    const timer = setTimeout(() => {
-      supabase.from('profiles').upsert({
-        id: user.id,
-        buddy_name: buddyName,
-        active_skin: activeSkin,
-        is_on_fire: isOnFire,
-        practiced_sports: practicedSports,
-        raios,
-        unlocked_store_skins: unlockedStoreSkins,
-      });
-    }, 500);
+    const timer = setTimeout(saveProfileNow, 500);
     return () => clearTimeout(timer);
   }, [raios, activeSkin, practicedSports, unlockedStoreSkins, isOnFire, buddyName]);
 
@@ -976,23 +1053,23 @@ export default function App() {
   }, [user, currentScreen]);
 
   const toggleSport = (id: string, forceDelete: boolean = false) => {
-    setPracticedSports(prev => {
-      const next = { ...prev };
-      if (next[id] !== undefined || forceDelete) {
-        delete next[id];
-      } else {
-        next[id] = 0;
-      }
-      return next;
-    });
+    const next = { ...practicedSports };
+    if (next[id] !== undefined || forceDelete) {
+      delete next[id];
+    } else {
+      next[id] = 0;
+    }
+    setPracticedSports(next);
+    saveProfileNow({ practicedSports: next });
   };
 
   const updateProgress = (id: string, amt: number) => {
-    setPracticedSports(prev => {
-      if (prev[id] === undefined) return prev;
-      return { ...prev, [id]: prev[id] + amt };
-    });
-    setRaios(prev => prev + (20 * amt));
+    if (practicedSports[id] === undefined) return;
+    const nextSports = { ...practicedSports, [id]: practicedSports[id] + amt };
+    const nextRaios = raios + 20 * amt;
+    setPracticedSports(nextSports);
+    setRaios(nextRaios);
+    saveProfileNow({ practicedSports: nextSports, raios: nextRaios });
   };
 
   if (loadingAuth) {
@@ -1058,7 +1135,7 @@ export default function App() {
                 }} buddyName={buddyName} setBuddyName={setBuddyName} practicedSports={practicedSports} toggleSport={toggleSport} />}
                 {currentScreen === "dashboard" && <DashboardScreen
                   onCustomization={() => setCurrentScreen("customization")}
-                  onBananeiras={() => setCurrentScreen("bananeira-selection")}
+                  onBananeiras={() => { saveProfileNow(); setCurrentScreen("bananeira-selection"); }}
                   onAchievements={() => setCurrentScreen("achievements")}
                   onLogout={() => supabase.auth.signOut()}
                   buddyName={buddyName || "Bananinha"}
@@ -1068,8 +1145,19 @@ export default function App() {
                   pokeToast={pokeToast}
                 />}
                 {currentScreen === "customization" && <CustomizationScreen onBack={() => setCurrentScreen("dashboard")} activeSkin={activeSkin} setActiveSkin={setActiveSkin} practicedSports={practicedSports} raios={raios} setRaios={setRaios} unlockedStoreSkins={unlockedStoreSkins} setUnlockedStoreSkins={setUnlockedStoreSkins} />}
-                {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name) => { setCurrentBananeira({ id, name }); setCurrentScreen("bananeira-map"); }} />}
-                {currentScreen === "bananeira-map" && currentBananeira && <BananeiraMapScreen onBack={() => setCurrentScreen("bananeira-selection")} bananeiraId={currentBananeira.id} bananeiraName={currentBananeira.name} currentUserId={user?.id ?? ""} />}
+                {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name) => { saveProfileNow(); setCurrentBananeira({ id, name }); setCurrentScreen("bananeira-map"); }} />}
+                {currentScreen === "bananeira-map" && currentBananeira && <BananeiraMapScreen
+                  onBack={() => setCurrentScreen("bananeira-selection")}
+                  bananeiraId={currentBananeira.id}
+                  bananeiraName={currentBananeira.name}
+                  currentUserId={user?.id ?? ""}
+                  currentUserName={buddyName || "Bananinha"}
+                  currentUserSkin={activeSkin}
+                  currentUserIsOnFire={isOnFire}
+                  currentUserScore={sportSessionsTotal(practicedSports)}
+                  practicedSports={practicedSports}
+                  updateProgress={updateProgress}
+                />}
                 {currentScreen === "achievements" && <AchievementsScreen onBack={() => setCurrentScreen("dashboard")} practicedSports={practicedSports} toggleSport={toggleSport} updateProgress={updateProgress} isOnFire={isOnFire} setIsOnFire={setIsOnFire} raios={raios} />}
               </motion.div>
             </AnimatePresence>
