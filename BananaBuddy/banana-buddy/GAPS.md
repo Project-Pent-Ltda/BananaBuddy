@@ -36,7 +36,11 @@ Verificado em `src/App.tsx` (~980 linhas, arquivo único).
 ### 1. ✅ O loop social — ENDEREÇADO (2026-06-15)
 As Bananeiras agora são reais, backed por Supabase: criar/entrar por código (RPC `create_bananeira`/`join_bananeira`), membros e ranking computados de verdade (`bananeira_overview`, `bananeira_members` × `profiles`), e "Cutucar" via tabela `pokes` com checagem de não-vistos no dashboard. Sem real-time — atualização por refresh manual (decisão do usuário). Ver `db/bananeiras.sql` e `lib/bananeiras.ts`.
 
-Pendente apenas: seeding de contas demo para o pitch (gap secundário, não bloqueia).
+Mapa com fundo pixel art, pódio/destaque do líder, esporte principal e badge de fundador por membro, registro de treino direto do mapa (2026-06-16).
+
+**Pendente (gaps secundários, não bloqueiam o pitch):**
+- **Seeding de contas demo** — Bananeira de demonstração com 2-3 membros e `practiced_sports` preenchido, pra não começar com ranking zerado.
+- **Utilidade real da cutucada** — hoje é só um toast social, sem efeito de jogo (não dá raios, não afeta streak/On Fire, sem limite diário). Avaliar dar peso à mecânica (ex.: pequeno bônus a quem cutuca, ou penalidade por ignorar).
 
 ### 2. 🔴 A banana não apodrece de verdade
 O gancho emocional inteiro — "se você sumir, sua banana apodrece" — **não funciona** (`App.tsx:421`):

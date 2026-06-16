@@ -786,13 +786,13 @@ const BananeiraMapScreen = ({
   const [pokeStatus, setPokeStatus] = useState<string>("");
   const [showRegister, setShowRegister] = useState(false);
   const [showRanking, setShowRanking] = useState(true);
-  const [positions] = useState(() => new Map<string, { x: number; y: number }>());
-
   const positionFor = (userId: string) => {
-    if (!positions.has(userId)) {
-      positions.set(userId, { x: 20 + Math.random() * 60, y: 20 + Math.random() * 50 });
-    }
-    return positions.get(userId)!;
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
+    return {
+      x: 20 + (hash % 6000) / 100,
+      y: 20 + (Math.floor(hash / 6000) % 5000) / 100,
+    };
   };
 
   const refresh = () => {
@@ -827,10 +827,11 @@ const BananeiraMapScreen = ({
     } catch {
       setPokeStatus("Erro ao cutucar");
     }
+    setTimeout(() => setPokeStatus(""), 3000);
   };
 
   return (
-    <div className="relative h-full w-full flex flex-col bg-black overflow-hidden">
+    <div className="relative h-full w-full bg-black overflow-hidden">
       <div className="absolute inset-0 z-0 bg-black">
         <div
           className="absolute inset-0 bg-cover bg-center"
@@ -838,68 +839,7 @@ const BananeiraMapScreen = ({
         />
       </div>
 
-      <div className="relative z-20 px-6 pt-12 pb-4 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between">
-        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={onBack}>
-          <ChevronRight className="w-5 h-5 rotate-180" />
-        </Button>
-        <div className="text-center">
-          <div className="text-[10px] uppercase tracking-[2px] text-banana font-bold">Mapa Ativo</div>
-          <div className="font-display font-bold text-white">{bananeiraName}</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => setShowRegister(true)}>
-            <Plus className="w-5 h-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={refresh}>
-            <Zap className="w-5 h-5" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="relative z-20 px-6 pb-2">
-        {showRanking ? (
-          <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-3">
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-2 flex items-center justify-between gap-2">
-              <span>Ranking (sessões)</span>
-              <span className="flex items-center gap-2">
-                {liveMembers.length} {liveMembers.length === 1 ? "membro" : "membros"}
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="w-5 h-5 rounded-full text-white/60 hover:text-white"
-                  onClick={() => setShowRanking((v: boolean) => !v)}
-                >
-                  <EyeOff className="w-3 h-3" />
-                </Button>
-              </span>
-            </h4>
-            <div className="flex flex-col gap-1">
-              {liveMembers.map((m, i) => (
-                <div key={m.userId} className={`flex items-center justify-between text-xs rounded-lg px-3 py-1.5 ${rankRowStyle(i)}`}>
-                  <span className="font-bold text-white flex items-center gap-1">
-                    {medalFor(i) ?? `#${i + 1}`} {m.userId === leaderId && "👑"} {sportIcon(m.topSport)} {m.name} {m.userId === currentUserId && "(Você)"} {m.userId === founderId && <span title="Fundador">🌱</span>}
-                  </span>
-                  <span className="text-banana font-bold">{m.score}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="flex justify-end">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="w-6 h-6 rounded-full bg-black/40 backdrop-blur-sm text-white/60 hover:text-white"
-              onClick={() => setShowRanking((v: boolean) => !v)}
-            >
-              <Eye className="w-3 h-3" />
-            </Button>
-          </div>
-        )}
-        {pokeStatus && <div className="text-[10px] text-banana font-bold mt-2 bg-black/40 backdrop-blur-sm rounded-lg px-2 py-1 inline-block">{pokeStatus}</div>}
-      </div>
-
-      <div className="flex-1 relative z-10 w-full h-full overflow-hidden">
+      <div className="absolute inset-0 z-10 overflow-hidden">
         {loading && <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">Carregando membros...</div>}
         {mapBananas.map((b) => (
           <motion.div
@@ -999,6 +939,69 @@ const BananeiraMapScreen = ({
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+
+      <div className="absolute top-0 left-0 right-0 z-20 flex flex-col">
+      <div className="px-6 pt-12 pb-4 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between">
+        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={onBack}>
+          <ChevronRight className="w-5 h-5 rotate-180" />
+        </Button>
+        <div className="text-center">
+          <div className="text-[10px] uppercase tracking-[2px] text-banana font-bold">Mapa Ativo</div>
+          <div className="font-display font-bold text-white">{bananeiraName}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => setShowRegister(true)}>
+            <Plus className="w-5 h-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={refresh}>
+            <Zap className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="relative z-20 px-6 pb-2">
+        {showRanking ? (
+          <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-3">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-2 flex items-center justify-between gap-2">
+              <span>Ranking (sessões)</span>
+              <span className="flex items-center gap-2">
+                {liveMembers.length} {liveMembers.length === 1 ? "membro" : "membros"}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="w-5 h-5 rounded-full text-white/60 hover:text-white"
+                  onClick={() => setShowRanking((v: boolean) => !v)}
+                >
+                  <EyeOff className="w-3 h-3" />
+                </Button>
+              </span>
+            </h4>
+            <div className="flex flex-col gap-1">
+              {liveMembers.map((m, i) => (
+                <div key={m.userId} className={`flex items-center justify-between text-xs rounded-lg px-3 py-1.5 ${rankRowStyle(i)}`}>
+                  <span className="font-bold text-white flex items-center gap-1">
+                    {medalFor(i) ?? `#${i + 1}`} {m.userId === leaderId && "👑"} {sportIcon(m.topSport)} {m.name} {m.userId === currentUserId && "(Você)"} {m.userId === founderId && <span title="Fundador">🌱</span>}
+                  </span>
+                  <span className="text-banana font-bold">{m.score}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="w-6 h-6 rounded-full bg-black/40 backdrop-blur-sm text-white/60 hover:text-white"
+              onClick={() => setShowRanking((v: boolean) => !v)}
+            >
+              <Eye className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
+        {pokeStatus && <div className="text-[10px] text-banana font-bold mt-2 bg-black/40 backdrop-blur-sm rounded-lg px-2 py-1 inline-block">{pokeStatus}</div>}
+      </div>
       </div>
     </div>
   );
