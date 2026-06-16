@@ -131,3 +131,24 @@ export async function markRescuesSeen(ids: string[]): Promise<void> {
   const { error } = await supabase.from('rescue_notifications').update({ seen: true }).in('id', ids)
   if (error) throw error
 }
+
+export async function registerResurrection(bananeiraId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('register_resurrection', { p_bananeira_id: bananeiraId })
+  if (error) throw error
+  return data as boolean
+}
+
+export async function fetchUnseenResurrections(): Promise<{ id: string; fromName: string; bananeiraNome: string }[]> {
+  const { data, error } = await supabase
+    .from('resurrection_notifications')
+    .select('id, from_name, bananeira_name')
+    .eq('seen', false)
+  if (error) throw error
+  return (data ?? []).map((r: any) => ({ id: r.id, fromName: r.from_name, bananeiraNome: r.bananeira_name }))
+}
+
+export async function markResurrectionsSeen(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const { error } = await supabase.from('resurrection_notifications').update({ seen: true }).in('id', ids)
+  if (error) throw error
+}

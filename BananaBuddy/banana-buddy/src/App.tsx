@@ -29,6 +29,9 @@ import {
   redeemPendingPokes,
   fetchUnseenRescues,
   markRescuesSeen,
+  registerResurrection,
+  fetchUnseenResurrections,
+  markResurrectionsSeen,
   sportSessionsTotal,
   topSportOf,
   type BananeiraOverview,
@@ -399,12 +402,50 @@ const OnboardingScreen = ({ onNext, buddyName, setBuddyName, practicedSports, to
 
 type AppNotification =
   | { kind: "poke"; fromName: string }
-  | { kind: "rescue"; rescuedName: string; bonus: number };
+  | { kind: "rescue"; rescuedName: string; bonus: number }
+  | { kind: "resurrection-self"; bonus: number }
+  | { kind: "resurrection-witness"; fromName: string; bananeiraNome: string };
 
 const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
   notification: AppNotification, onDismiss: () => void, onTrainNow: () => void
 }) => {
-  const isPoke = notification.kind === "poke";
+  const n = notification;
+
+  const config = (() => {
+    if (n.kind === "poke") return {
+      bananaMood: "happy" as const,
+      bananaClass: "saturate-[0.4] sepia-[0.6] grayscale-[0.3] brightness-75 mx-auto",
+      title: `${n.fromName} te cutucou! 👈`,
+      subtitle: "Sua banana tá apodrecendo 🍌 — treina pra reverter!",
+      primaryBtn: { label: "Treinar agora", action: onTrainNow },
+      dismissLabel: "Depois",
+    };
+    if (n.kind === "rescue") return {
+      bananaMood: "happy" as const,
+      bananaClass: "mx-auto",
+      title: `Você salvou a banana do ${n.rescuedName}! 🦸`,
+      subtitle: `+${n.bonus} raios por cuidar dos amigos.`,
+      primaryBtn: null,
+      dismissLabel: "Boa!",
+    };
+    if (n.kind === "resurrection-self") return {
+      bananaMood: "on-fire" as const,
+      bananaClass: "mx-auto",
+      title: "Sua banana voltou dos mortos! 🍌🔥",
+      subtitle: `+${n.bonus} raios de bônus de sobrevivente. Não suma mais!`,
+      primaryBtn: null,
+      dismissLabel: "Voltei!",
+    };
+    return {
+      bananaMood: "happy" as const,
+      bananaClass: "mx-auto",
+      title: `${n.fromName} ressuscitou! 🍌🔥`,
+      subtitle: `${n.fromName} voltou dos mortos na ${n.bananeiraNome}. Dê boas-vindas!`,
+      primaryBtn: null,
+      dismissLabel: "🎉",
+    };
+  })();
+
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6">
       <motion.div
@@ -413,29 +454,17 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
         exit={{ opacity: 0, scale: 0.9, y: 10 }}
         className="bg-[#111] border border-white/10 rounded-3xl p-6 w-full max-w-xs text-center shadow-2xl"
       >
-        <BananaIcon
-          mood={isPoke ? "happy" : "happy"}
-          size="md"
-          skin="base"
-          className={isPoke ? "saturate-[0.4] sepia-[0.6] grayscale-[0.3] brightness-75 mx-auto" : "mx-auto"}
-          animated={false}
-        />
-        <h3 className="font-display text-lg font-bold text-white mt-3">
-          {isPoke ? `${notification.fromName} te cutucou! 👈` : `Você salvou a banana do ${notification.rescuedName}! 🦸`}
-        </h3>
-        <p className="text-xs text-white/60 mt-1">
-          {isPoke
-            ? "Sua banana tá apodrecendo 🍌 — treina pra reverter!"
-            : `+${notification.bonus} raios por cuidar dos amigos.`}
-        </p>
+        <BananaIcon mood={config.bananaMood} size="md" skin="base" className={config.bananaClass} animated={n.kind === "resurrection-self"} />
+        <h3 className="font-display text-lg font-bold text-white mt-3">{config.title}</h3>
+        <p className="text-xs text-white/60 mt-1">{config.subtitle}</p>
         <div className="flex flex-col gap-2 mt-5">
-          {isPoke && (
-            <Button onClick={onTrainNow} className="h-11 rounded-2xl bg-banana text-black font-bold text-sm">
-              Treinar agora
+          {config.primaryBtn && (
+            <Button onClick={config.primaryBtn.action} className="h-11 rounded-2xl bg-banana text-black font-bold text-sm">
+              {config.primaryBtn.label}
             </Button>
           )}
           <Button onClick={onDismiss} variant="ghost" className="h-11 rounded-2xl text-white/60 hover:text-white text-sm">
-            {isPoke ? "Depois" : "Boa!"}
+            {config.dismissLabel}
           </Button>
         </div>
       </motion.div>
@@ -1276,6 +1305,15 @@ export default function App() {
       } catch {
         // silencioso — checagem best-effort
       }
+      try {
+        const resurrections = await fetchUnseenResurrections();
+        if (resurrections.length > 0) {
+          setNotificationQueue((prev) => [...prev, ...resurrections.map((r) => ({ kind: "resurrection-witness" as const, fromName: r.fromName, bananeiraNome: r.bananeiraNome }))]);
+          await markResurrectionsSeen(resurrections.map((r) => r.id));
+        }
+      } catch {
+        // silencioso — checagem best-effort
+      }
     })();
   }, [user, currentScreen]);
 
@@ -1294,8 +1332,10 @@ export default function App() {
 
   const updateProgress = (id: string, amt: number) => {
     if (practicedSports[id] === undefined) return;
+    const wasRotten = bananaDecayState(lastActivityDate, todayStr()).state === "podre";
+    const ressurrectionBonus = wasRotten ? 50 : 0;
     const nextSports = { ...practicedSports, [id]: practicedSports[id] + amt };
-    const nextRaios = raios + 20 * amt;
+    const nextRaios = raios + 20 * amt + ressurrectionBonus;
     setPracticedSports(nextSports);
     setRaios(nextRaios);
     const streakResult = registerDailyActivity();
@@ -1307,9 +1347,13 @@ export default function App() {
       streakShields: streakResult.shields,
       lastActivityDate: streakResult.lastDate,
     });
-    redeemPendingPokes().catch(() => {
-      // silencioso — resgate é best-effort
-    });
+    if (wasRotten) {
+      setNotificationQueue((prev) => [...prev, { kind: "resurrection-self" as const, bonus: ressurrectionBonus }]);
+      if (currentBananeira) {
+        registerResurrection(currentBananeira.id).catch(() => {});
+      }
+    }
+    redeemPendingPokes().catch(() => {});
   };
 
   if (loadingAuth) {
