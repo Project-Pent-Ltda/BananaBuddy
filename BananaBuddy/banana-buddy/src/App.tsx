@@ -472,19 +472,13 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
   );
 };
 
-const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogout, buddyName, activeSkin, isOnFire, raios, currentStreak, streakShields, streakBadgeTitle, supportCount, notification, onDismissNotification, onTrainNow }: {
+const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogout, buddyName, activeSkin, isOnFire, raios, currentStreak, streakShields, streakBadgeTitle, supportCount }: {
   onCustomization: () => void, onBananeiras: () => void, onAchievements: () => void, onLogout: () => void,
   buddyName: string, activeSkin: string, isOnFire: boolean, raios: number,
   currentStreak: number, streakShields: number, streakBadgeTitle: string | null, supportCount: number,
-  notification: AppNotification | null, onDismissNotification: () => void, onTrainNow: () => void
 }) => {
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden">
-      <AnimatePresence>
-        {notification && (
-          <NotificationModal notification={notification} onDismiss={onDismissNotification} onTrainNow={onTrainNow} />
-        )}
-      </AnimatePresence>
       <div className="relative z-10 flex-1 flex flex-col p-6 pt-12">
         <div className="flex justify-end mb-1">
           <Button variant="ghost" size="icon" onClick={onLogout} className="w-8 h-8 rounded-full text-white/30 hover:text-white hover:bg-white/10">
@@ -1430,9 +1424,6 @@ export default function App() {
                   streakShields={streakShields}
                   streakBadgeTitle={streakBadge(longestStreak)?.title ?? null}
                   supportCount={supportCount}
-                  notification={notificationQueue[0] ?? null}
-                  onDismissNotification={dismissNotification}
-                  onTrainNow={() => { dismissNotification(); setCurrentScreen("achievements"); }}
                 />}
                 {currentScreen === "customization" && <CustomizationScreen onBack={() => setCurrentScreen("dashboard")} activeSkin={activeSkin} setActiveSkin={setActiveSkin} practicedSports={practicedSports} raios={raios} setRaios={setRaios} unlockedStoreSkins={unlockedStoreSkins} setUnlockedStoreSkins={setUnlockedStoreSkins} />}
                 {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name, founderId) => { saveProfileNow(); setCurrentBananeira({ id, name, founderId }); setCurrentScreen("bananeira-map"); }} />}
@@ -1455,6 +1446,15 @@ export default function App() {
                 />}
                 {currentScreen === "achievements" && <AchievementsScreen onBack={() => setCurrentScreen("dashboard")} practicedSports={practicedSports} toggleSport={toggleSport} updateProgress={updateProgress} isOnFire={isOnFire} setIsOnFire={setIsOnFire} raios={raios} />}
               </motion.div>
+            </AnimatePresence>
+            <AnimatePresence>
+              {notificationQueue[0] && (
+                <NotificationModal
+                  notification={notificationQueue[0]}
+                  onDismiss={dismissNotification}
+                  onTrainNow={() => { dismissNotification(); setCurrentScreen("achievements"); }}
+                />
+              )}
             </AnimatePresence>
           </div>
         </div>
