@@ -903,7 +903,11 @@ const BananeiraMapScreen = ({
     fetchBananeiraMembers(bananeiraId).then(setMembers).catch((e) => console.error('fetchBananeiraMembers failed:', e)).finally(() => setLoading(false));
   };
 
-  useEffect(() => { refresh(); }, [bananeiraId]);
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, [bananeiraId]);
 
   const liveMembers: BananeiraMember[] = members
     .map((m) =>
