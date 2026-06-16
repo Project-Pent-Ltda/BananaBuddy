@@ -106,13 +106,13 @@ const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base", ani
   const [frame, setFrame] = useState(1);
 
   useEffect(() => {
-    if (skin === "base") return;
-    const intervalTime = mood === "dead" ? 300 : mood === "on-fire" ? 100 : 150;
+    if (skin === "base" || !animated) return;
+    const intervalTime = mood === "dead" ? 300 : mood === "on-fire" ? 100 : 600;
     const interval = setInterval(() => {
       setFrame((prev) => (prev % 4) + 1);
     }, intervalTime);
     return () => clearInterval(interval);
-  }, [skin, mood]);
+  }, [skin, mood, animated]);
 
   const sizes = {
     sm: "w-12 h-12 text-2xl",
@@ -472,11 +472,17 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
   );
 };
 
-const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogout, buddyName, activeSkin, isOnFire, raios, currentStreak, streakShields, streakBadgeTitle, supportCount }: {
+const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogout, buddyName, activeSkin, isOnFire, raios, currentStreak, streakShields, streakBadgeTitle, supportCount, lastActivityDate }: {
   onCustomization: () => void, onBananeiras: () => void, onAchievements: () => void, onLogout: () => void,
   buddyName: string, activeSkin: string, isOnFire: boolean, raios: number,
   currentStreak: number, streakShields: number, streakBadgeTitle: string | null, supportCount: number,
+  lastActivityDate: string | null,
 }) => {
+  const decay = isOnFire ? null : bananaDecayState(lastActivityDate, todayStr());
+  const decayText =
+    decay?.state === "amadurecendo" ? "Sua banana tá amadurecendo... treina hoje!" :
+    decay?.state === "quase-podre"  ? "Sua banana tá quase podre! Corre!" :
+    decay?.state === "podre"        ? "SUA BANANA APODRECEU. Ressuscita!" : null;
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden">
       <div className="relative z-10 flex-1 flex flex-col p-6 pt-12">
@@ -506,13 +512,19 @@ const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogo
           {streakBadgeTitle && (
             <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">🏅 {streakBadgeTitle}</p>
           )}
+          {decayText && (
+            <p className={`text-[11px] font-bold mt-2 ${decay?.state === "podre" ? "text-red-400 uppercase tracking-wide" : "text-orange-400"}`}>
+              {decayText}
+            </p>
+          )}
         </div>
 
         <div className="flex-1 flex items-center justify-center relative px-2 mb-6 cursor-pointer group" onClick={onCustomization}>
           <div className="relative border border-white/20 rounded-3xl w-full max-w-xs aspect-square flex items-center justify-center bg-[#0a0a0a]">
             {isOnFire && <div className="absolute inset-0 border-2 border-red-500 rounded-3xl animate-pulse" />}
+            {decay?.atRisk && <div className="absolute inset-0 border-2 border-white/20 rounded-3xl animate-pulse" />}
             <div className="absolute w-40 h-40 bg-banana/5 rounded-full blur-2xl group-hover:bg-banana/10 transition-all duration-500" />
-            <BananaIcon mood={isOnFire ? "on-fire" : "happy"} size="lg" skin={activeSkin} className="group-hover:scale-105 transition-transform" />
+            <BananaIcon mood={isOnFire ? "on-fire" : decay?.state === "podre" ? "dead" : "happy"} size="lg" skin={activeSkin} className={`group-hover:scale-105 transition-transform ${decay?.cssClass ?? ""}`} />
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1428,6 +1440,7 @@ export default function App() {
                   streakShields={streakShields}
                   streakBadgeTitle={streakBadge(longestStreak)?.title ?? null}
                   supportCount={supportCount}
+                  lastActivityDate={lastActivityDate}
                 />}
                 {currentScreen === "customization" && <CustomizationScreen onBack={() => setCurrentScreen("dashboard")} activeSkin={activeSkin} setActiveSkin={setActiveSkin} practicedSports={practicedSports} raios={raios} setRaios={setRaios} unlockedStoreSkins={unlockedStoreSkins} setUnlockedStoreSkins={setUnlockedStoreSkins} />}
                 {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name, founderId) => { saveProfileNow(); setCurrentBananeira({ id, name, founderId }); setCurrentScreen("bananeira-map"); }} />}
