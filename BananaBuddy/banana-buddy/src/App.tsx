@@ -784,7 +784,7 @@ const BananeiraMapScreen = ({ onBack, bananeiraId, bananeiraName, currentUserId 
 
   const refresh = () => {
     setLoading(true);
-    fetchBananeiraMembers(bananeiraId).then(setMembers).catch(() => {}).finally(() => setLoading(false));
+    fetchBananeiraMembers(bananeiraId).then(setMembers).catch((e) => console.error('fetchBananeiraMembers failed:', e)).finally(() => setLoading(false));
   };
 
   useEffect(() => { refresh(); }, [bananeiraId]);

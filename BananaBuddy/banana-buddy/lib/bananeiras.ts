@@ -40,19 +40,33 @@ export async function joinBananeira(code: string): Promise<string> {
 }
 
 export async function fetchBananeiraMembers(bananeiraId: string): Promise<BananeiraMember[]> {
-  const { data, error } = await supabase
+  const { data: memberRows, error: membersError } = await supabase
     .from('bananeira_members')
-    .select('user_id, profiles(buddy_name, active_skin, is_on_fire, practiced_sports)')
+    .select('user_id')
     .eq('bananeira_id', bananeiraId)
-  if (error) throw error
+  if (membersError) throw membersError
 
-  const members = (data ?? []).map((row: any) => ({
-    userId: row.user_id as string,
-    name: row.profiles?.buddy_name || 'Banana',
-    skin: row.profiles?.active_skin || 'base',
-    isOnFire: !!row.profiles?.is_on_fire,
-    score: sportSessionsTotal(row.profiles?.practiced_sports),
-  }))
+  const userIds = (memberRows ?? []).map((row) => row.user_id as string)
+  if (userIds.length === 0) return []
+
+  const { data: profileRows, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, buddy_name, active_skin, is_on_fire, practiced_sports')
+    .in('id', userIds)
+  if (profilesError) throw profilesError
+
+  const profileById = new Map((profileRows ?? []).map((p: any) => [p.id as string, p]))
+
+  const members = userIds.map((userId) => {
+    const profile = profileById.get(userId)
+    return {
+      userId,
+      name: profile?.buddy_name || 'Banana',
+      skin: profile?.active_skin || 'base',
+      isOnFire: !!profile?.is_on_fire,
+      score: sportSessionsTotal(profile?.practiced_sports),
+    }
+  })
 
   return members.sort((a, b) => b.score - a.score)
 }

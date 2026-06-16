@@ -4,6 +4,34 @@ Registro de checkpoints do desenvolvimento. Atualizado a cada sessão.
 
 ---
 
+## ✅ CHECKPOINT 5 — 2026-06-15: Deploy no Vercel + fix do mapa de Bananeiras
+
+**O que foi feito:**
+- App publicado no Vercel: `https://banana-buddy.vercel.app/` (Root Directory
+  `BananaBuddy/banana-buddy`, env vars `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`).
+- Auditoria de RLS no Supabase (`db/check_rls.sql`): confirmado RLS ligado e
+  policies corretas em `profiles`, `bananeiras`, `bananeira_members`, `pokes` —
+  nenhuma alteração necessária. Schema de `profiles` documentado em `db/profiles.sql`
+  (não existia DDL versionado até então).
+- READMEs corrigidos (raiz mantém o pitch, mas com nota de "visão-alvo"; o aninhado
+  trocou as instruções erradas do template AI Studio pelo setup real com Supabase).
+- **Bug corrigido:** `fetchBananeiraMembers` (`lib/bananeiras.ts`) dava erro 400 —
+  fazia um "join embutido" `bananeira_members → profiles` que depende de uma FK
+  direta entre as duas tabelas, que não existe (ambas referenciam só `auth.users`).
+  Reescrito como duas queries separadas, unidas em JS. Esse era o motivo de
+  **nenhuma banana aparecer no mapa**, nem a do próprio usuário — confirmado em
+  teste real com 2 contas.
+- `App.tsx`: o `.catch(() => {})` do fetch do mapa agora loga o erro no console,
+  em vez de falhar silenciosamente (facilita debug de problemas futuros).
+
+**Pendente (próxima rodada, Parte F do plano):**
+- Bug: skin escolhida não aparece na própria banana no mapa (mapa lê do banco com
+  latência; precisa usar estado local pro próprio usuário).
+- Features: registrar treino direto do mapa, pódio/destaque do líder, mais info
+  por membro (esporte principal, fundador, contagem), seed de dados demo.
+
+---
+
 ## ✅ CHECKPOINT 4 — 2026-06-15: Bananeiras reais (Supabase)
 
 **O que foi feito (GAP #1 do `GAPS.md`, agora endereçado):**
