@@ -1,23 +1,33 @@
 import { motion, AnimatePresence } from "motion/react";
 import { useState, useEffect } from "react";
-import { 
-  Apple, 
-  Chrome, 
-  Lock, 
-  Plus, 
-  Flame, 
-  Users, 
-  Trophy, 
-  Dumbbell, 
-  Bike, 
-  Zap, 
-  Target, 
+import {
+  Apple,
+  Chrome,
+  Lock,
+  Plus,
+  Flame,
+  Users,
+  Trophy,
+  Zap,
   Heart,
   ChevronRight,
   Search,
   Check,
-  X
+  LogOut
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import {
+  fetchMyBananeiras,
+  createBananeira,
+  joinBananeira,
+  fetchBananeiraMembers,
+  sendPoke,
+  fetchUnseenPokes,
+  markPokesSeen,
+  type BananeiraOverview,
+  type BananeiraMember,
+} from "@/lib/bananeiras";
+import type { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,6 +47,33 @@ const availableSports: Sport[] = [
   { id: "musculacao", name: "Musculação", icon: "🏋️", target: 20, unit: "dias", rewardSkin: "boxe" },
   { id: "yoga", name: "Yoga", icon: "🧘", target: 5, unit: "sessões", rewardSkin: "yoga" },
 ];
+
+// Mudar para false após a apresentação para reativar a lógica de bloqueio
+const DEMO_ALL_UNLOCKED = true;
+
+type FreeSkin = { id: string; label: string; frames: number; category: 'free' };
+type StoreSkin = { id: string; label: string; frames: number; category: 'store'; price: number };
+type AchievementSkin = { id: string; label: string; frames: number; category: 'achievement'; sport: string; target: number };
+type SkinDef = FreeSkin | StoreSkin | AchievementSkin;
+
+const SKINS: SkinDef[] = [
+  { id: 'base',   label: 'Original',  frames: 1, category: 'free' },
+  { id: 'ballet', label: 'Ballet',    frames: 4, category: 'store',       price: 300 },
+  { id: 'boxe',   label: 'Boxe',      frames: 4, category: 'achievement', sport: 'musculacao', target: 30 },
+  { id: 'cycle',  label: 'Ciclismo',  frames: 4, category: 'store',       price: 600 },
+  { id: 'judo',   label: 'Judô',      frames: 4, category: 'achievement', sport: 'judo',       target: 20 },
+  { id: 'run',    label: 'Corrida',   frames: 4, category: 'achievement', sport: 'corrida',    target: 50 },
+  { id: 'soccer', label: 'Futebol',   frames: 4, category: 'store',       price: 900 },
+  { id: 'swim',   label: 'Natação',   frames: 4, category: 'store',       price: 1200 },
+  { id: 'yoga',   label: 'Yoga',      frames: 4, category: 'achievement', sport: 'yoga',       target: 15 },
+];
+
+function isSkinUnlocked(skin: SkinDef, ctx: { unlockedStoreSkins: string[]; practicedSports: Record<string, number> }): boolean {
+  if (DEMO_ALL_UNLOCKED) return true;
+  if (skin.category === 'free') return true;
+  if (skin.category === 'store') return ctx.unlockedStoreSkins.includes(skin.id);
+  return (ctx.practicedSports[skin.sport] ?? 0) >= skin.target;
+}
 
 // --- Components ---
 
@@ -90,7 +127,7 @@ const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base" }: {
 };
 
 const SplashScreen = ({ onNext }: { onNext: () => void }) => {
-  const skins = ["base", "ballet", "boxe", "cycle", "judo", "run", "soccer", "swim", "yoga"];
+  const skins = SKINS.map(s => s.id);
   const [skinIndex, setSkinIndex] = useState(0);
 
   useEffect(() => {
@@ -133,42 +170,105 @@ const SplashScreen = ({ onNext }: { onNext: () => void }) => {
   );
 };
 
-const LoginScreen = ({ onNext }: { onNext: () => void }) => {
+const LoginScreen = ({ onSuccess }: { onSuccess: () => void }) => {
+  const [tab, setTab] = useState<'entrar' | 'cadastrar'>('entrar');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    setError('');
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) setError('Email ou senha incorretos.');
+    else onSuccess();
+  };
+
+  const handleRegister = async () => {
+    setError('');
+    if (password !== confirmPassword) { setError('As senhas não conferem.'); return; }
+    if (password.length < 6) { setError('A senha deve ter pelo menos 6 caracteres.'); return; }
+    setLoading(true);
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+    setLoading(false);
+    if (error) { console.error('signUp error:', error); setError(error.message || JSON.stringify(error)); return; }
+    if (!data.session) { setError('Verifique seu email para confirmar o cadastro.'); return; }
+    onSuccess();
+  };
+
   return (
-    <div className="relative h-full w-full flex flex-col px-8 py-16 bg-black overflow-hidden">
-      <div className="flex flex-col items-center justify-center gap-3 mb-10 w-full mt-12">
-        <span className="font-display font-black text-3xl tracking-tight text-white">Banana Buddy</span>
+    <div className="relative h-full w-full flex flex-col px-8 py-10 bg-black overflow-y-auto">
+      <div className="flex flex-col items-center gap-1 mb-8 mt-8">
+        <img src="/banana_yoga_4.png" style={{ width: 48, height: 48, imageRendering: 'pixelated', objectFit: 'contain' }} />
+        <span style={{ fontFamily: "'Press Start 2P', cursive", fontSize: '20px' }} className="text-white whitespace-nowrap">Banana Buddy</span>
       </div>
 
-      <div className="flex-1 flex flex-col justify-center items-center text-center mt-8">
-        <motion.h2 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="font-display text-4xl font-extrabold leading-tight mb-4"
+      <div className="flex bg-white/5 rounded-full p-1 mb-6">
+        <button
+          onClick={() => { setTab('entrar'); setError(''); }}
+          className={`flex-1 rounded-full py-2 text-xs font-bold uppercase tracking-wider transition-colors ${tab === 'entrar' ? 'bg-banana text-black' : 'text-white/60 hover:text-white'}`}
         >
-          Bem-vindo à sua<br />nova rotina.
-        </motion.h2>
-        <motion.p 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="text-white/60 text-lg mb-12"
+          Entrar
+        </button>
+        <button
+          onClick={() => { setTab('cadastrar'); setError(''); }}
+          className={`flex-1 rounded-full py-2 text-xs font-bold uppercase tracking-wider transition-colors ${tab === 'cadastrar' ? 'bg-banana text-black' : 'text-white/60 hover:text-white'}`}
         >
-          Transformando suor em diversão.
-        </motion.p>
-
-        <div className="flex flex-col gap-4 w-full">
-          <Button onClick={onNext} className="h-14 rounded-3xl bg-white text-black hover:bg-white/90 font-bold flex items-center justify-center gap-3 w-full">
-            <Apple className="w-5 h-5 fill-current" />
-            Continuar com Apple
-          </Button>
-          <Button onClick={onNext} className="h-14 rounded-3xl bg-white text-black hover:bg-white/90 font-bold flex items-center justify-center gap-3 w-full">
-            <Chrome className="w-5 h-5 text-blue-500" />
-            Continuar com Google
-          </Button>
-        </div>
+          Cadastrar
+        </button>
       </div>
-      <p className="mt-auto text-center text-[10px] text-white/40 uppercase tracking-widest">
+
+      <div className="flex flex-col gap-3">
+        {tab === 'entrar' ? (
+          <>
+            <Input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
+              className="h-12 rounded-2xl bg-white/5 border-white/10 text-white px-5" />
+            <Input type="password" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              className="h-12 rounded-2xl bg-white/5 border-white/10 text-white px-5" />
+            {error && <p className="text-red-400 text-xs text-center px-2">{error}</p>}
+            <Button onClick={handleLogin} disabled={loading || !email || !password}
+              className="h-12 rounded-3xl bg-banana text-black hover:bg-banana-dark font-bold disabled:opacity-50 mt-1">
+              {loading ? 'Entrando...' : 'Entrar'}
+            </Button>
+            <div className="flex items-center gap-3 my-1">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-[10px] text-white/30 uppercase tracking-widest">ou</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+            <Button className="h-12 rounded-3xl bg-white text-black hover:bg-white/90 font-bold flex items-center justify-center gap-3">
+              <Apple className="w-5 h-5 fill-current" /> Continuar com Apple
+            </Button>
+            <Button className="h-12 rounded-3xl bg-white text-black hover:bg-white/90 font-bold flex items-center justify-center gap-3">
+              <Chrome className="w-5 h-5 text-blue-500" /> Continuar com Google
+            </Button>
+          </>
+        ) : (
+          <>
+            <Input placeholder="Nome" value={name} onChange={e => setName(e.target.value)}
+              className="h-12 rounded-2xl bg-white/5 border-white/10 text-white px-5" />
+            <Input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
+              className="h-12 rounded-2xl bg-white/5 border-white/10 text-white px-5" />
+            <Input type="password" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)}
+              className="h-12 rounded-2xl bg-white/5 border-white/10 text-white px-5" />
+            <Input type="password" placeholder="Confirmar senha" value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleRegister()}
+              className="h-12 rounded-2xl bg-white/5 border-white/10 text-white px-5" />
+            {error && <p className="text-red-400 text-xs text-center px-2">{error}</p>}
+            <Button onClick={handleRegister} disabled={loading || !email || !password || !confirmPassword}
+              className="h-12 rounded-3xl bg-banana text-black hover:bg-banana-dark font-bold disabled:opacity-50 mt-1">
+              {loading ? 'Criando conta...' : 'Criar conta'}
+            </Button>
+          </>
+        )}
+      </div>
+
+      <p className="mt-6 text-center text-[10px] text-white/40 uppercase tracking-widest">
         Ao continuar, você concorda com nossos Termos e Privacidade.
       </p>
     </div>
@@ -176,6 +276,9 @@ const LoginScreen = ({ onNext }: { onNext: () => void }) => {
 };
 
 const HealthIntegrationScreen = ({ onNext }: { onNext: () => void }) => {
+  const [appleHealth, setAppleHealth] = useState(true);
+  const [googleFit, setGoogleFit] = useState(false);
+
   return (
     <div className="relative h-full w-full flex flex-col px-8 py-16 bg-black overflow-hidden">
       <h2 className="font-display text-2xl font-bold text-center mb-8">Conecte sua Saúde</h2>
@@ -188,18 +291,28 @@ const HealthIntegrationScreen = ({ onNext }: { onNext: () => void }) => {
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
               <Heart className="text-red-500 w-6 h-6 fill-current" />
             </div>
-            <span className="font-bold text-white">Apple Health</span>
+            <div className="flex flex-col">
+              <span className="font-bold text-white">Apple Health</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${appleHealth ? "text-green-400" : "text-white/30"}`}>
+                {appleHealth ? "Conectado" : "Desconectado"}
+              </span>
+            </div>
           </div>
-          <Switch defaultChecked />
+          <Switch checked={appleHealth} onCheckedChange={setAppleHealth} className="data-checked:bg-green-500" />
         </Card>
         <Card className="p-6 rounded-[24px] bg-[#111] border border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
               <Chrome className="text-blue-500 w-6 h-6" />
             </div>
-            <span className="font-bold text-white">Google Fit</span>
+            <div className="flex flex-col">
+              <span className="font-bold text-white">Google Fit</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${googleFit ? "text-green-400" : "text-white/30"}`}>
+                {googleFit ? "Conectado" : "Desconectado"}
+              </span>
+            </div>
           </div>
-          <Switch />
+          <Switch checked={googleFit} onCheckedChange={setGoogleFit} className="data-checked:bg-green-500" />
         </Card>
       </div>
       <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
@@ -262,13 +375,27 @@ const OnboardingScreen = ({ onNext, buddyName, setBuddyName, practicedSports, to
   );
 };
 
-const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, buddyName, activeSkin, isOnFire, raios }: { 
-  onCustomization: () => void, onBananeiras: () => void, onAchievements: () => void, 
-  buddyName: string, activeSkin: string, isOnFire: boolean, raios: number 
+const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogout, buddyName, activeSkin, isOnFire, raios, pokeToast }: {
+  onCustomization: () => void, onBananeiras: () => void, onAchievements: () => void, onLogout: () => void,
+  buddyName: string, activeSkin: string, isOnFire: boolean, raios: number, pokeToast?: string
 }) => {
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden">
+      {pokeToast && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-banana text-black text-xs font-bold px-4 py-2 rounded-full shadow-lg"
+        >
+          {pokeToast}
+        </motion.div>
+      )}
       <div className="relative z-10 flex-1 flex flex-col p-6 pt-12">
+        <div className="flex justify-end mb-1">
+          <Button variant="ghost" size="icon" onClick={onLogout} className="w-8 h-8 rounded-full text-white/30 hover:text-white hover:bg-white/10">
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-white">{buddyName}</h1>
           <p className="text-xs text-banana uppercase tracking-widest font-bold">Nível 12 • Pro Fitness</p>
@@ -437,41 +564,16 @@ const AchievementsScreen = ({ onBack, practicedSports, toggleSport, updateProgre
   );
 };
 
-const CustomizationScreen = ({ 
-  onBack, activeSkin, setActiveSkin, practicedSports, raios, setRaios, unlockedStoreSkins, setUnlockedStoreSkins 
-}: { 
+const CustomizationScreen = ({
+  onBack, activeSkin, setActiveSkin, practicedSports, raios, setRaios, unlockedStoreSkins, setUnlockedStoreSkins
+}: {
   onBack: () => void, activeSkin: string, setActiveSkin: (s: string) => void, practicedSports: Record<string, number>,
   raios: number, setRaios: (v: number | ((prev: number) => number)) => void,
   unlockedStoreSkins: string[], setUnlockedStoreSkins: (v: string[] | ((prev: string[]) => string[])) => void
 }) => {
-  const [tab, setTab] = useState<"loja" | "conquistas">("loja");
-
-  const storeItems = [
-    { id: "ballet", name: "Sapatilha", price: 500, icon: "🩰" },
-    { id: "soccer", name: "Chuteira", price: 1200, icon: "⚽" },
-    { id: "cycle", name: "Bike Pro", price: 300, icon: "🚴" },
-    { id: "swim", name: "Touca", price: 800, icon: "🏊" },
-  ];
-
-  // Map achievement skins based on progress
-  const achievementItems = [
-    { id: "base", name: "Banana Padrão", requirement: "Desbloqueado", icon: "🍌", unlocked: true },
-    ...availableSports.map(sport => {
-      const prog = practicedSports[sport.id] || 0;
-      const isUnlocked = prog >= sport.target;
-      return {
-        id: sport.rewardSkin,
-        name: `Skin ${sport.name}`,
-        requirement: `${sport.target} ${sport.unit}`,
-        icon: sport.icon,
-        unlocked: isUnlocked
-      };
-    })
-  ];
-
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden px-6 pt-12 pb-6">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 text-white" onClick={onBack}>
             <ChevronRight className="w-5 h-5 rotate-180" />
@@ -483,85 +585,108 @@ const CustomizationScreen = ({
         </div>
       </div>
 
-      <div className="flex bg-white/5 rounded-full p-1 mb-6">
-        <button onClick={() => setTab("loja")} className={`flex-1 rounded-full py-2 text-xs font-bold uppercase tracking-wider transition-colors ${tab === "loja" ? "bg-banana text-black" : "text-white/60 hover:text-white"}`}>Loja</button>
-        <button onClick={() => setTab("conquistas")} className={`flex-1 rounded-full py-2 text-xs font-bold uppercase tracking-wider transition-colors ${tab === "conquistas" ? "bg-banana text-black" : "text-white/60 hover:text-white"}`}>Conquistas</button>
-      </div>
-
       <ScrollArea className="flex-1 -mx-2 px-2">
-        {tab === "loja" ? (
-          <div className="grid grid-cols-2 gap-4 pb-10">
-            {storeItems.map((item, i) => {
-              const isUnlocked = unlockedStoreSkins.includes(item.id);
-              const canBuy = raios >= item.price;
-              
-              const handleAction = () => {
-                if (isUnlocked) {
-                  setActiveSkin(item.id);
-                } else if (canBuy) {
-                  setRaios(r => r - item.price);
-                  setUnlockedStoreSkins(prev => [...prev, item.id]);
-                  setActiveSkin(item.id);
-                }
-              };
+        <div className="grid grid-cols-3 gap-3 pb-10">
+          {SKINS.map((skin, i) => {
+            const unlocked = isSkinUnlocked(skin, { unlockedStoreSkins, practicedSports });
+            const isActive = activeSkin === skin.id;
 
-              return (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={i} className="bg-[#111] border border-white/10 rounded-[24px] p-4 flex flex-col items-center text-center gap-2">
-                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center text-3xl mb-2">{item.icon}</div>
-                  <span className="font-bold text-sm h-10 flex items-center">{item.name}</span>
-                  <Button 
-                    onClick={handleAction}
-                    disabled={!isUnlocked && !canBuy}
-                    className={`w-full rounded-xl mt-auto text-xs font-bold transition-colors ${
-                      activeSkin === item.id ? "bg-banana text-black hover:bg-banana" : 
-                      isUnlocked ? "bg-white/10 hover:bg-white/20 text-white" :
-                      canBuy ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : 
-                      "bg-white/5 text-white/30"
-                    }`}
-                  >
-                    {activeSkin === item.id ? "Equipado" : 
-                     isUnlocked ? "Usar" : 
-                     <><Zap className="w-3 h-3 mr-1" /> {item.price}</>}
-                  </Button>
-                </motion.div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4 pb-10">
-            {achievementItems.map((item, i) => (
-              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} key={i} className={`bg-[#111] border border-white/10 rounded-[24px] p-4 flex items-center gap-4 ${!item.unlocked ? "opacity-50 grayscale" : ""}`}>
-                <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-2xl">{item.icon}</div>
-                <div className="flex-1">
-                  <div className="font-bold text-sm">{item.name}</div>
-                  <div className="text-[10px] text-banana uppercase tracking-widest mt-1">{item.unlocked ? "Desbloqueado" : item.requirement}</div>
+            const handlePress = () => {
+              if (unlocked) {
+                setActiveSkin(skin.id);
+                return;
+              }
+              if (skin.category === 'store') {
+                if (raios >= skin.price) {
+                  setRaios(r => r - skin.price);
+                  setUnlockedStoreSkins(prev => [...prev, skin.id]);
+                  setActiveSkin(skin.id);
+                }
+              }
+            };
+
+            const badgeLabel = isActive
+              ? 'Equipada'
+              : !unlocked && skin.category === 'store'
+                ? `⚡ ${skin.price}`
+                : !unlocked
+                  ? '🔒'
+                  : 'Usar';
+
+            return (
+              <motion.div
+                key={skin.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                onClick={handlePress}
+                className={`rounded-[20px] p-3 flex flex-col items-center gap-1 cursor-pointer border transition-all ${
+                  isActive
+                    ? 'bg-banana/10 border-banana'
+                    : unlocked
+                      ? 'bg-[#111] border-white/10 hover:border-white/30'
+                      : 'bg-[#0a0a0a] border-white/5 opacity-60'
+                }`}
+              >
+                <div className={`w-12 h-12 flex items-center justify-center ${!unlocked ? 'grayscale' : ''}`}>
+                  <BananaIcon skin={skin.id} size="sm" mood="happy" />
                 </div>
-                {item.unlocked ? (
-                  <Button 
-                    size="sm"
-                    onClick={() => setActiveSkin(item.id)}
-                    className={`h-8 rounded-lg text-[10px] font-bold px-3 transition-colors ${activeSkin === item.id ? "bg-banana text-black hover:bg-banana" : "bg-white/10 text-white hover:bg-white/20"}`}
-                  >
-                    {activeSkin === item.id ? "Equipado" : "Usar"}
-                  </Button>
-                ) : (
-                  <Lock className="text-white/40 w-5 h-5" />
-                )}
+                <span className="text-[10px] font-bold text-center leading-tight mt-1">{skin.label}</span>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${
+                  isActive ? 'bg-banana text-black' : 'bg-white/10 text-white/60'
+                }`}>
+                  {badgeLabel}
+                </span>
               </motion.div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </ScrollArea>
     </div>
   );
 };
 
-const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, onSelect: (id: string) => void }) => {
-  const groups = [
-    { id: "1", name: "Clã dos Marombeiros", members: 42, activity: "Alta" },
-    { id: "2", name: "Jiu-Jitsu Elite", members: 15, activity: "Média" },
-    { id: "3", name: "Corredores da Orla", members: 89, activity: "Muito Alta" },
-  ];
+const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, onSelect: (id: string, name: string) => void }) => {
+  const [groups, setGroups] = useState<BananeiraOverview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [joinCode, setJoinCode] = useState("");
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [createdCode, setCreatedCode] = useState<string | null>(null);
+
+  const refresh = () => {
+    setLoading(true);
+    fetchMyBananeiras().then(setGroups).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const handleJoin = async () => {
+    setError("");
+    if (!joinCode.trim()) return;
+    try {
+      const id = await joinBananeira(joinCode.trim());
+      const list = await fetchMyBananeiras();
+      setGroups(list);
+      const found = list.find((g) => g.id === id);
+      onSelect(id, found?.name ?? "Bananeira");
+    } catch (e: any) {
+      setError(e.message || "Bananeira não encontrada");
+    }
+  };
+
+  const handleCreate = async () => {
+    setError("");
+    if (!newName.trim()) return;
+    try {
+      const { id, code } = await createBananeira(newName.trim());
+      setCreatedCode(code);
+      refresh();
+    } catch (e: any) {
+      setError(e.message || "Erro ao criar Bananeira");
+    }
+  };
 
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden px-6 pt-12 pb-6">
@@ -572,46 +697,109 @@ const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, on
         <h2 className="font-display text-2xl font-bold">Bananeiras</h2>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-        <Input placeholder="Buscar ou código..." className="h-12 rounded-[20px] bg-[#111] border-white/10 text-white pl-12 focus:ring-banana" />
+      <div className="flex gap-2 mb-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+          <Input
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            placeholder="Entrar com código..."
+            className="h-12 rounded-[20px] bg-[#111] border-white/10 text-white pl-12 focus:ring-banana uppercase"
+          />
+        </div>
+        <Button className="h-12 rounded-[20px] bg-banana text-black font-bold px-4" onClick={handleJoin}>
+          Entrar
+        </Button>
       </div>
+      {error && <div className="text-xs text-red-400 font-semibold mb-4 ml-2">{error}</div>}
 
       <ScrollArea className="flex-1 -mx-2 px-2">
         <div className="flex flex-col gap-4 pb-20">
           <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-2">Suas Bananeiras</h3>
+
+          {loading && <div className="text-white/40 text-sm ml-2">Carregando...</div>}
+          {!loading && groups.length === 0 && (
+            <div className="text-white/40 text-sm ml-2">Você ainda não está em nenhuma Bananeira.</div>
+          )}
+
           {groups.map((g, i) => (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={g.id} onClick={() => onSelect(g.id)} className="bg-[#111] border border-white/10 rounded-[24px] p-5 cursor-pointer hover:border-banana/50 transition-colors group relative overflow-hidden">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={g.id} onClick={() => onSelect(g.id, g.name)} className="bg-[#111] border border-white/10 rounded-[24px] p-5 cursor-pointer hover:border-banana/50 transition-colors group relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-banana/5 rounded-bl-full -z-10 group-hover:bg-banana/10 transition-colors" />
               <div className="flex justify-between items-start mb-2">
                 <span className="font-bold text-lg">{g.name}</span>
                 <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-banana group-hover:translate-x-1 transition-all" />
               </div>
               <div className="flex items-center gap-4 text-xs font-semibold text-white/60">
-                <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {g.members}</span>
-                <span className="flex items-center gap-1 text-green-400"><Zap className="w-3 h-3" /> {g.activity}</span>
+                <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {g.member_count}</span>
+                <span className="flex items-center gap-1 text-white/40">código: {g.code}</span>
               </div>
             </motion.div>
           ))}
-          <Button className="mt-4 h-14 rounded-3xl bg-white/5 text-white border border-white/10 hover:bg-white/10 font-bold border-dashed w-full">
-            <Plus className="w-5 h-5 mr-2" /> Criar Bananeira
-          </Button>
+
+          {createdCode && (
+            <div className="bg-banana/10 border border-banana/40 rounded-[20px] p-4 text-center">
+              <div className="text-xs text-white/60 mb-1">Bananeira criada! Compartilhe o código:</div>
+              <div className="text-2xl font-display font-bold text-banana tracking-widest">{createdCode}</div>
+            </div>
+          )}
+
+          {creating ? (
+            <div className="flex flex-col gap-2 mt-2">
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Nome da Bananeira"
+                className="h-12 rounded-[20px] bg-[#111] border-white/10 text-white"
+              />
+              <Button className="h-12 rounded-3xl bg-banana text-black font-bold" onClick={handleCreate}>
+                Confirmar
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={() => setCreating(true)} className="mt-4 h-14 rounded-3xl bg-white/5 text-white border border-white/10 hover:bg-white/10 font-bold border-dashed w-full">
+              <Plus className="w-5 h-5 mr-2" /> Criar Bananeira
+            </Button>
+          )}
         </div>
       </ScrollArea>
     </div>
   );
 };
 
-const BananeiraMapScreen = ({ onBack, buddyName, activeSkin }: { onBack: () => void, buddyName: string, activeSkin: string }) => {
-  const [selectedBanana, setSelectedBanana] = useState<any>(null);
+type MapBanana = BananeiraMember & { x: number; y: number; duration: number };
 
-  const mapBananas = [
-    { id: 1, name: buddyName, state: "Focado", mood: "happy", skin: activeSkin, x: 50, y: 50, duration: 25 },
-    { id: 2, name: "Maria", state: "Amadurecendo", mood: "zen", skin: "yoga", x: 60, y: 40, duration: 30 },
-    { id: 3, name: "Pedro", state: "Podre", mood: "dead", skin: "base", x: 80, y: 70, duration: 40 },
-    { id: 4, name: "Ana", state: "On Fire", mood: "on-fire", skin: "boxe", x: 40, y: 60, duration: 20 },
-    { id: 5, name: "Lucas", state: "Reluzente", mood: "happy", skin: "run", x: 30, y: 80, duration: 35 },
-  ];
+const BananeiraMapScreen = ({ onBack, bananeiraId, bananeiraName, currentUserId }: { onBack: () => void, bananeiraId: string, bananeiraName: string, currentUserId: string }) => {
+  const [selectedBanana, setSelectedBanana] = useState<MapBanana | null>(null);
+  const [members, setMembers] = useState<BananeiraMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pokeStatus, setPokeStatus] = useState<string>("");
+  const [positions] = useState(() => new Map<string, { x: number; y: number; duration: number }>());
+
+  const positionFor = (userId: string) => {
+    if (!positions.has(userId)) {
+      positions.set(userId, { x: 20 + Math.random() * 60, y: 20 + Math.random() * 50, duration: 20 + Math.random() * 20 });
+    }
+    return positions.get(userId)!;
+  };
+
+  const refresh = () => {
+    setLoading(true);
+    fetchBananeiraMembers(bananeiraId).then(setMembers).catch(() => {}).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { refresh(); }, [bananeiraId]);
+
+  const mapBananas: MapBanana[] = members.map((m) => ({ ...m, ...positionFor(m.userId) }));
+
+  const handlePoke = async (member: BananeiraMember) => {
+    setPokeStatus("Enviando...");
+    try {
+      await sendPoke(member.userId, mapBananas.find((m) => m.userId === currentUserId)?.name ?? "Alguém", bananeiraId);
+      setPokeStatus("Cutucada enviada! 👈");
+    } catch {
+      setPokeStatus("Erro ao cutucar");
+    }
+  };
 
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden">
@@ -626,17 +814,33 @@ const BananeiraMapScreen = ({ onBack, buddyName, activeSkin }: { onBack: () => v
         </Button>
         <div className="text-center">
           <div className="text-[10px] uppercase tracking-[2px] text-banana font-bold">Mapa Ativo</div>
-          <div className="font-display font-bold text-white">Clã dos Marombeiros</div>
+          <div className="font-display font-bold text-white">{bananeiraName}</div>
         </div>
-        <div className="w-10" />
+        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={refresh}>
+          <Zap className="w-5 h-5" />
+        </Button>
+      </div>
+
+      <div className="relative z-20 px-6 pb-2">
+        <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Ranking (sessões)</h4>
+        <div className="flex flex-col gap-1">
+          {members.map((m, i) => (
+            <div key={m.userId} className="flex items-center justify-between text-xs bg-white/5 rounded-lg px-3 py-1.5">
+              <span className="font-bold text-white/80">#{i + 1} {m.name} {m.userId === currentUserId && "(Você)"}</span>
+              <span className="text-banana font-bold">{m.score}</span>
+            </div>
+          ))}
+        </div>
+        {pokeStatus && <div className="text-[10px] text-banana font-bold mt-2">{pokeStatus}</div>}
       </div>
 
       <div className="flex-1 relative z-10 w-full h-full">
+        {loading && <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">Carregando membros...</div>}
         {mapBananas.map((b) => (
           <motion.div
-            key={b.id}
+            key={b.userId}
             initial={{ left: `${b.x}%`, top: `${b.y}%` }}
-            animate={{ 
+            animate={{
               left: [`${b.x}%`, `${Math.max(10, (b.x + Math.random() * 40 - 20))}%`, `${b.x}%`],
               top: [`${b.y}%`, `${Math.max(10, (b.y + Math.random() * 40 - 20))}%`, `${b.y}%`]
             }}
@@ -648,7 +852,7 @@ const BananeiraMapScreen = ({ onBack, buddyName, activeSkin }: { onBack: () => v
               <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase whitespace-nowrap bg-black/60 px-2 py-0.5 rounded backdrop-blur-sm opacity-50">
                 {b.name}
               </div>
-              <BananaIcon mood={b.mood as any} size="sm" skin={b.skin} className={`transition-all ${b.state === "Podre" ? "grayscale opacity-50 blur-[1px]" : "hover:scale-110"}`} />
+              <BananaIcon mood={b.isOnFire ? "on-fire" : "happy"} size="sm" skin={b.skin} className="transition-all hover:scale-110" />
             </div>
           </motion.div>
         ))}
@@ -662,17 +866,21 @@ const BananeiraMapScreen = ({ onBack, buddyName, activeSkin }: { onBack: () => v
                 </Button>
                 <div className="flex gap-4 items-center relative z-10">
                   <div className="w-16 h-16 flex items-center justify-center bg-white/5 rounded-2xl">
-                    <BananaIcon mood={selectedBanana.mood} size="sm" skin={selectedBanana.skin} className={selectedBanana.state === "Podre" ? "grayscale opacity-50" : ""} />
+                    <BananaIcon mood={selectedBanana.isOnFire ? "on-fire" : "happy"} size="sm" skin={selectedBanana.skin} />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-display text-xl font-bold text-white">
-                      {selectedBanana.name} {selectedBanana.id === 1 && "(Você)"}
+                      {selectedBanana.name} {selectedBanana.userId === currentUserId && "(Você)"}
                     </h3>
-                    <div className="text-[10px] uppercase font-black tracking-widest text-banana mb-1">Estado: {selectedBanana.state}</div>
                     <div className="flex gap-2 mt-2">
-                       <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">Lvl 12</span>
-                       <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80 flex items-center"><Flame className="w-3 h-3 mr-1 text-red-500" /> 5</span>
+                       <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">{selectedBanana.score} sessões</span>
+                       {selectedBanana.isOnFire && <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80 flex items-center"><Flame className="w-3 h-3 mr-1 text-red-500" /> On Fire</span>}
                     </div>
+                    {selectedBanana.userId !== currentUserId && (
+                      <Button className="mt-3 h-9 rounded-xl bg-banana text-black font-bold text-xs px-4" onClick={() => handlePoke(selectedBanana)}>
+                        Cutucar 👈
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -686,14 +894,86 @@ const BananeiraMapScreen = ({ onBack, buddyName, activeSkin }: { onBack: () => v
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("splash");
+  const [user, setUser] = useState<User | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [buddyName, setBuddyName] = useState("");
   const [activeSkin, setActiveSkin] = useState<string>("base");
   const [isOnFire, setIsOnFire] = useState(false);
   const [practicedSports, setPracticedSports] = useState<Record<string, number>>({});
-  
-  // Moedas e Loja
   const [raios, setRaios] = useState(0);
   const [unlockedStoreSkins, setUnlockedStoreSkins] = useState<string[]>([]);
+  const [currentBananeira, setCurrentBananeira] = useState<{ id: string; name: string } | null>(null);
+  const [pokeToast, setPokeToast] = useState<string>("");
+
+  const loadProfile = async (userId: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (data) {
+      setBuddyName(data.buddy_name ?? '');
+      setActiveSkin(data.active_skin ?? 'base');
+      setIsOnFire(data.is_on_fire ?? false);
+      setPracticedSports(data.practiced_sports ?? {});
+      setRaios(data.raios ?? 0);
+      setUnlockedStoreSkins(data.unlocked_store_skins ?? []);
+      setProfileLoaded(true);
+      if (data.onboarding_done) setCurrentScreen('dashboard');
+      else setCurrentScreen('health');
+    }
+  };
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        await loadProfile(u.id);
+      }
+      if (event === 'SIGNED_OUT') {
+        setProfileLoaded(false);
+        setBuddyName('');
+        setActiveSkin('base');
+        setIsOnFire(false);
+        setPracticedSports({});
+        setRaios(0);
+        setUnlockedStoreSkins([]);
+        setCurrentScreen('login');
+      }
+      if (event === 'INITIAL_SESSION') setLoadingAuth(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user || !profileLoaded) return;
+    const timer = setTimeout(() => {
+      supabase.from('profiles').upsert({
+        id: user.id,
+        buddy_name: buddyName,
+        active_skin: activeSkin,
+        is_on_fire: isOnFire,
+        practiced_sports: practicedSports,
+        raios,
+        unlocked_store_skins: unlockedStoreSkins,
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [raios, activeSkin, practicedSports, unlockedStoreSkins, isOnFire, buddyName]);
+
+  useEffect(() => {
+    if (!user || currentScreen !== 'dashboard') return;
+    (async () => {
+      try {
+        const pokes = await fetchUnseenPokes();
+        if (pokes.length > 0) {
+          setPokeToast(`${pokes[0].fromName} te cutucou! 👈`);
+          await markPokesSeen(pokes.map(p => p.id));
+          setTimeout(() => setPokeToast(""), 4000);
+        }
+      } catch {
+        // silencioso — checagem best-effort
+      }
+    })();
+  }, [user, currentScreen]);
 
   const toggleSport = (id: string, forceDelete: boolean = false) => {
     setPracticedSports(prev => {
@@ -701,7 +981,7 @@ export default function App() {
       if (next[id] !== undefined || forceDelete) {
         delete next[id];
       } else {
-        next[id] = 0; // init progress
+        next[id] = 0;
       }
       return next;
     });
@@ -712,13 +992,21 @@ export default function App() {
       if (prev[id] === undefined) return prev;
       return { ...prev, [id]: prev[id] + amt };
     });
-    setRaios(prev => prev + (20 * amt)); // 20 raios por progresso
+    setRaios(prev => prev + (20 * amt));
   };
+
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen w-full bg-black flex items-center justify-center">
+        <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1, repeat: Infinity }} className="text-5xl">🍌</motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full bg-black flex items-center justify-center p-4 md:p-10 overflow-hidden font-sans text-white">
       <div className="showcase-container grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-10 w-full max-w-6xl h-full max-h-[800px]">
-        
+
         {/* Left Side Panel */}
         <div className="hidden lg:flex flex-col gap-6 side-panel">
           <div className="app-preview-card bg-[#111] border border-white/10 rounded-[24px] p-5 flex-1 flex flex-col justify-center items-center text-center cursor-pointer hover:border-banana/50 transition-colors" onClick={() => setCurrentScreen('splash')}>
@@ -726,13 +1014,12 @@ export default function App() {
             <div className="text-4xl mb-4">🍌</div>
             <p className="text-xs text-white italic">"A saúde é um estado de espírito."</p>
           </div>
-          
           <div className="app-preview-card bg-[#111] border border-white/10 rounded-[24px] p-5 flex-1 flex flex-col justify-center items-center text-center cursor-pointer hover:border-banana/50 transition-colors" onClick={() => setCurrentScreen('achievements')}>
             <div className="text-[10px] font-semibold uppercase tracking-[2px] text-banana mb-2">Conquistas & Metas</div>
             <div className="flex gap-2 mt-2 mb-4">
-               <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-xl">🥋</div>
-               <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-xl">🏃</div>
-               <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-xl">🔥</div>
+              <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-xl">🥋</div>
+              <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-xl">🏃</div>
+              <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-xl">🔥</div>
             </div>
             <p className="text-xs text-white/50">Cumpra missões e fique On Fire.</p>
           </div>
@@ -741,7 +1028,6 @@ export default function App() {
         {/* Center Phone Mockup */}
         <div className="phone-mockup bg-black rounded-[40px] border-[8px] border-[#222] relative flex flex-col overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.5)] aspect-[9/19.5] max-h-[768px] mx-auto w-full max-w-[360px]">
           <div className="notch w-[120px] h-[30px] bg-[#222] absolute top-0 left-1/2 -translate-x-1/2 rounded-b-[15px] z-30" />
-          
           <div className="flex-1 relative overflow-hidden bg-black">
             <AnimatePresence mode="wait">
               <motion.div
@@ -753,13 +1039,37 @@ export default function App() {
                 className="h-full w-full"
               >
                 {currentScreen === "splash" && <SplashScreen onNext={() => setCurrentScreen("login")} />}
-                {currentScreen === "login" && <LoginScreen onNext={() => setCurrentScreen("health")} />}
+                {currentScreen === "login" && <LoginScreen onSuccess={() => {}} />}
                 {currentScreen === "health" && <HealthIntegrationScreen onNext={() => setCurrentScreen("onboarding")} />}
-                {currentScreen === "onboarding" && <OnboardingScreen onNext={() => setCurrentScreen("dashboard")} buddyName={buddyName} setBuddyName={setBuddyName} practicedSports={practicedSports} toggleSport={toggleSport} />}
-                {currentScreen === "dashboard" && <DashboardScreen onCustomization={() => setCurrentScreen("customization")} onBananeiras={() => setCurrentScreen("bananeira-selection")} onAchievements={() => setCurrentScreen("achievements")} buddyName={buddyName || "Bananinha"} activeSkin={activeSkin} isOnFire={isOnFire} raios={raios} />}
+                {currentScreen === "onboarding" && <OnboardingScreen onNext={async () => {
+                  if (user) {
+                    await supabase.from('profiles').upsert({
+                      id: user.id,
+                      buddy_name: buddyName || 'Bananinha',
+                      active_skin: activeSkin,
+                      is_on_fire: isOnFire,
+                      practiced_sports: practicedSports,
+                      raios,
+                      unlocked_store_skins: unlockedStoreSkins,
+                      onboarding_done: true,
+                    });
+                  }
+                  setCurrentScreen("dashboard");
+                }} buddyName={buddyName} setBuddyName={setBuddyName} practicedSports={practicedSports} toggleSport={toggleSport} />}
+                {currentScreen === "dashboard" && <DashboardScreen
+                  onCustomization={() => setCurrentScreen("customization")}
+                  onBananeiras={() => setCurrentScreen("bananeira-selection")}
+                  onAchievements={() => setCurrentScreen("achievements")}
+                  onLogout={() => supabase.auth.signOut()}
+                  buddyName={buddyName || "Bananinha"}
+                  activeSkin={activeSkin}
+                  isOnFire={isOnFire}
+                  raios={raios}
+                  pokeToast={pokeToast}
+                />}
                 {currentScreen === "customization" && <CustomizationScreen onBack={() => setCurrentScreen("dashboard")} activeSkin={activeSkin} setActiveSkin={setActiveSkin} practicedSports={practicedSports} raios={raios} setRaios={setRaios} unlockedStoreSkins={unlockedStoreSkins} setUnlockedStoreSkins={setUnlockedStoreSkins} />}
-                {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id) => setCurrentScreen("bananeira-map")} />}
-                {currentScreen === "bananeira-map" && <BananeiraMapScreen onBack={() => setCurrentScreen("bananeira-selection")} buddyName={buddyName || "Bananinha"} activeSkin={activeSkin} />}
+                {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name) => { setCurrentBananeira({ id, name }); setCurrentScreen("bananeira-map"); }} />}
+                {currentScreen === "bananeira-map" && currentBananeira && <BananeiraMapScreen onBack={() => setCurrentScreen("bananeira-selection")} bananeiraId={currentBananeira.id} bananeiraName={currentBananeira.name} currentUserId={user?.id ?? ""} />}
                 {currentScreen === "achievements" && <AchievementsScreen onBack={() => setCurrentScreen("dashboard")} practicedSports={practicedSports} toggleSport={toggleSport} updateProgress={updateProgress} isOnFire={isOnFire} setIsOnFire={setIsOnFire} raios={raios} />}
               </motion.div>
             </AnimatePresence>
@@ -768,7 +1078,7 @@ export default function App() {
 
         {/* Right Side Panel */}
         <div className="hidden lg:flex flex-col gap-6 side-panel">
-          <div className="app-preview-card bg-[#111] border border-white/10 rounded-[24px] p-5 flex-1 flex flex-col justify-center items-center text-center cursor-pointer hover:border-banana/50 transition-colors" onClick={() => setCurrentScreen('bananeira-map')}>
+          <div className="app-preview-card bg-[#111] border border-white/10 rounded-[24px] p-5 flex-1 flex flex-col justify-center items-center text-center cursor-pointer hover:border-banana/50 transition-colors" onClick={() => setCurrentScreen('bananeira-selection')}>
             <div className="text-[10px] font-semibold uppercase tracking-[2px] text-banana mb-2">Mapa da Bananeira</div>
             <p className="text-xs text-white/50 mb-3">Veja o status do seu clã em tempo real.</p>
             <div className="relative w-full h-24 bg-black/40 rounded-xl overflow-hidden mt-2 border border-white/10">
@@ -777,12 +1087,11 @@ export default function App() {
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-3xl">🔥</div>
             </div>
           </div>
-          
           <div className="app-preview-card bg-[#111] border border-white/10 rounded-[24px] p-5 flex-1 flex flex-col justify-center items-center text-center">
             <div className="text-[10px] font-semibold uppercase tracking-[2px] text-banana mb-2">Integração</div>
             <div className="flex gap-4 mb-4 mt-2">
-               <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center"><Heart className="text-red-500 w-6 h-6 fill-current" /></div>
-               <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center"><Chrome className="text-blue-500 w-6 h-6" /></div>
+              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center"><Heart className="text-red-500 w-6 h-6 fill-current" /></div>
+              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center"><Chrome className="text-blue-500 w-6 h-6" /></div>
             </div>
             <p className="text-xs text-white/50">Conectado aos principais apps de saúde.</p>
           </div>
