@@ -13,7 +13,9 @@ import {
   ChevronRight,
   Search,
   Check,
-  LogOut
+  LogOut,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -25,6 +27,7 @@ import {
   fetchUnseenPokes,
   markPokesSeen,
   sportSessionsTotal,
+  topSportOf,
   type BananeiraOverview,
   type BananeiraMember,
 } from "@/lib/bananeiras";
@@ -78,7 +81,7 @@ function isSkinUnlocked(skin: SkinDef, ctx: { unlockedStoreSkins: string[]; prac
 
 // --- Components ---
 
-const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base" }: { className?: string, mood?: "happy" | "on-fire" | "dead" | "zen", size?: "sm" | "md" | "lg", skin?: string }) => {
+const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base", animated = true }: { className?: string, mood?: "happy" | "on-fire" | "dead" | "zen", size?: "sm" | "md" | "lg", skin?: string, animated?: boolean }) => {
   const [frame, setFrame] = useState(1);
 
   useEffect(() => {
@@ -99,17 +102,17 @@ const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base" }: {
   const imgSrc = skin === "base" ? "/banana.png" : `/banana_${skin}_${frame}.png`;
 
   return (
-    <motion.div 
-      initial={{ scale: 0.8, rotate: -5 }}
-      animate={{ 
-        scale: 1, 
+    <motion.div
+      initial={{ scale: 0.8, rotate: animated ? -5 : 0 }}
+      animate={animated ? {
+        scale: 1,
         rotate: [ -5, 5, -5 ],
         y: [ 0, -10, 0 ]
-      }}
-      transition={{ 
+      } : { scale: 1, rotate: 0, y: 0 }}
+      transition={animated ? {
         rotate: { duration: 4, repeat: Infinity, ease: "easeInOut" },
         y: { duration: 2, repeat: Infinity, ease: "easeInOut" }
-      }}
+      } : { duration: 0.2 }}
       className={`relative flex items-center justify-center drop-shadow-2xl ${sizes[size]} ${className}`}
     >
       <img src={imgSrc} alt="Banana Buddy" className="w-full h-full object-contain drop-shadow-xl scale-[1.15]" />
@@ -647,7 +650,7 @@ const CustomizationScreen = ({
   );
 };
 
-const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, onSelect: (id: string, name: string) => void }) => {
+const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, onSelect: (id: string, name: string, founderId: string) => void }) => {
   const [groups, setGroups] = useState<BananeiraOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [joinCode, setJoinCode] = useState("");
@@ -671,7 +674,7 @@ const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, on
       const list = await fetchMyBananeiras();
       setGroups(list);
       const found = list.find((g) => g.id === id);
-      onSelect(id, found?.name ?? "Bananeira");
+      onSelect(id, found?.name ?? "Bananeira", found?.founder_id ?? "");
     } catch (e: any) {
       setError(e.message || "Bananeira não encontrada");
     }
@@ -724,7 +727,7 @@ const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, on
           )}
 
           {groups.map((g, i) => (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={g.id} onClick={() => onSelect(g.id, g.name)} className="bg-[#111] border border-white/10 rounded-[24px] p-5 cursor-pointer hover:border-banana/50 transition-colors group relative overflow-hidden">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={g.id} onClick={() => onSelect(g.id, g.name, g.founder_id)} className="bg-[#111] border border-white/10 rounded-[24px] p-5 cursor-pointer hover:border-banana/50 transition-colors group relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-banana/5 rounded-bl-full -z-10 group-hover:bg-banana/10 transition-colors" />
               <div className="flex justify-between items-start mb-2">
                 <span className="font-bold text-lg">{g.name}</span>
@@ -767,14 +770,14 @@ const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, on
   );
 };
 
-type MapBanana = BananeiraMember & { x: number; y: number; wobbleX: number; wobbleY: number; duration: number };
+type MapBanana = BananeiraMember & { x: number; y: number };
 
 const BananeiraMapScreen = ({
-  onBack, bananeiraId, bananeiraName, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore,
+  onBack, bananeiraId, bananeiraName, founderId, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore, currentUserTopSport,
   practicedSports, updateProgress
 }: {
-  onBack: () => void, bananeiraId: string, bananeiraName: string, currentUserId: string,
-  currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number,
+  onBack: () => void, bananeiraId: string, bananeiraName: string, founderId: string, currentUserId: string,
+  currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number, currentUserTopSport: string | null,
   practicedSports: Record<string, number>, updateProgress: (id: string, amt: number) => void
 }) => {
   const [selectedBanana, setSelectedBanana] = useState<MapBanana | null>(null);
@@ -782,18 +785,12 @@ const BananeiraMapScreen = ({
   const [loading, setLoading] = useState(true);
   const [pokeStatus, setPokeStatus] = useState<string>("");
   const [showRegister, setShowRegister] = useState(false);
-  const [positions] = useState(() => new Map<string, { x: number; y: number; wobbleX: number; wobbleY: number; duration: number }>());
+  const [showRanking, setShowRanking] = useState(true);
+  const [positions] = useState(() => new Map<string, { x: number; y: number }>());
 
   const positionFor = (userId: string) => {
     if (!positions.has(userId)) {
-      const x = 20 + Math.random() * 60;
-      const y = 20 + Math.random() * 50;
-      positions.set(userId, {
-        x, y,
-        wobbleX: Math.min(90, Math.max(10, x + Math.random() * 40 - 20)),
-        wobbleY: Math.min(85, Math.max(10, y + Math.random() * 40 - 20)),
-        duration: 20 + Math.random() * 20,
-      });
+      positions.set(userId, { x: 20 + Math.random() * 60, y: 20 + Math.random() * 50 });
     }
     return positions.get(userId)!;
   };
@@ -808,11 +805,19 @@ const BananeiraMapScreen = ({
   const liveMembers: BananeiraMember[] = members
     .map((m) =>
       m.userId === currentUserId
-        ? { ...m, name: currentUserName, skin: currentUserSkin, isOnFire: currentUserIsOnFire, score: currentUserScore }
+        ? { ...m, name: currentUserName, skin: currentUserSkin, isOnFire: currentUserIsOnFire, score: currentUserScore, topSport: currentUserTopSport }
         : m
     )
     .sort((a, b) => b.score - a.score);
   const mapBananas: MapBanana[] = liveMembers.map((m) => ({ ...m, ...positionFor(m.userId) }));
+  const leaderId = liveMembers.length > 0 && liveMembers[0].score > 0 ? liveMembers[0].userId : null;
+  const medalFor = (i: number) => (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : null);
+  const rankRowStyle = (i: number) =>
+    i === 0 ? "bg-banana/10 border border-banana/30" :
+    i === 1 ? "bg-white/10 border border-white/15" :
+    i === 2 ? "bg-orange-700/10 border border-orange-700/20" :
+    "bg-white/5";
+  const sportIcon = (id: string | null) => availableSports.find((s) => s.id === id)?.icon ?? null;
 
   const handlePoke = async (member: BananeiraMember) => {
     setPokeStatus("Enviando...");
@@ -827,8 +832,10 @@ const BananeiraMapScreen = ({
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden">
       <div className="absolute inset-0 z-0 bg-black">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,225,53,0.05)_0%,transparent_80%)]" />
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/fitness_perfect_map.png')", imageRendering: 'pixelated' }}
+        />
       </div>
 
       <div className="relative z-20 px-6 pt-12 pb-4 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between">
@@ -850,16 +857,46 @@ const BananeiraMapScreen = ({
       </div>
 
       <div className="relative z-20 px-6 pb-2">
-        <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Ranking (sessões)</h4>
-        <div className="flex flex-col gap-1">
-          {liveMembers.map((m, i) => (
-            <div key={m.userId} className="flex items-center justify-between text-xs bg-white/5 rounded-lg px-3 py-1.5">
-              <span className="font-bold text-white/80">#{i + 1} {m.name} {m.userId === currentUserId && "(Você)"}</span>
-              <span className="text-banana font-bold">{m.score}</span>
+        {showRanking ? (
+          <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-3">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-2 flex items-center justify-between gap-2">
+              <span>Ranking (sessões)</span>
+              <span className="flex items-center gap-2">
+                {liveMembers.length} {liveMembers.length === 1 ? "membro" : "membros"}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="w-5 h-5 rounded-full text-white/60 hover:text-white"
+                  onClick={() => setShowRanking((v: boolean) => !v)}
+                >
+                  <EyeOff className="w-3 h-3" />
+                </Button>
+              </span>
+            </h4>
+            <div className="flex flex-col gap-1">
+              {liveMembers.map((m, i) => (
+                <div key={m.userId} className={`flex items-center justify-between text-xs rounded-lg px-3 py-1.5 ${rankRowStyle(i)}`}>
+                  <span className="font-bold text-white flex items-center gap-1">
+                    {medalFor(i) ?? `#${i + 1}`} {m.userId === leaderId && "👑"} {sportIcon(m.topSport)} {m.name} {m.userId === currentUserId && "(Você)"} {m.userId === founderId && <span title="Fundador">🌱</span>}
+                  </span>
+                  <span className="text-banana font-bold">{m.score}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {pokeStatus && <div className="text-[10px] text-banana font-bold mt-2">{pokeStatus}</div>}
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="w-6 h-6 rounded-full bg-black/40 backdrop-blur-sm text-white/60 hover:text-white"
+              onClick={() => setShowRanking((v: boolean) => !v)}
+            >
+              <Eye className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
+        {pokeStatus && <div className="text-[10px] text-banana font-bold mt-2 bg-black/40 backdrop-blur-sm rounded-lg px-2 py-1 inline-block">{pokeStatus}</div>}
       </div>
 
       <div className="flex-1 relative z-10 w-full h-full overflow-hidden">
@@ -867,20 +904,21 @@ const BananeiraMapScreen = ({
         {mapBananas.map((b) => (
           <motion.div
             key={b.userId}
-            initial={{ left: `${b.x}%`, top: `${b.y}%` }}
-            animate={{
-              left: [`${b.x}%`, `${b.wobbleX}%`, `${b.x}%`],
-              top: [`${b.y}%`, `${b.wobbleY}%`, `${b.y}%`]
-            }}
-            transition={{ duration: b.duration, repeat: Infinity, ease: "easeInOut" }}
+            style={{ left: `${b.x}%`, top: `${b.y}%` }}
             className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer z-10"
             onClick={() => setSelectedBanana(b)}
           >
             <div className="relative">
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase whitespace-nowrap bg-black/60 px-2 py-0.5 rounded backdrop-blur-sm opacity-50">
+              {b.userId === leaderId && (
+                <div className="absolute -top-[26px] left-1/2 -translate-x-1/2 text-base">👑</div>
+              )}
+              <div
+                className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase whitespace-nowrap text-white"
+                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.9)' }}
+              >
                 {b.name}
               </div>
-              <BananaIcon mood={b.isOnFire ? "on-fire" : "happy"} size="sm" skin={b.skin} className="transition-all hover:scale-110" />
+              <BananaIcon mood={b.isOnFire ? "on-fire" : "happy"} size="sm" skin={b.skin} className="transition-all hover:scale-110" animated={false} />
             </div>
           </motion.div>
         ))}
@@ -894,14 +932,19 @@ const BananeiraMapScreen = ({
                 </Button>
                 <div className="flex gap-4 items-center relative z-10">
                   <div className="w-16 h-16 flex items-center justify-center bg-white/5 rounded-2xl">
-                    <BananaIcon mood={selectedBanana.isOnFire ? "on-fire" : "happy"} size="sm" skin={selectedBanana.skin} />
+                    <BananaIcon mood={selectedBanana.isOnFire ? "on-fire" : "happy"} size="sm" skin={selectedBanana.skin} animated={false} />
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display text-xl font-bold text-white">
-                      {selectedBanana.name} {selectedBanana.userId === currentUserId && "(Você)"}
+                      {selectedBanana.name} {selectedBanana.userId === currentUserId && "(Você)"} {selectedBanana.userId === founderId && <span title="Fundador">🌱</span>}
                     </h3>
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex gap-2 mt-2 flex-wrap">
                        <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">{selectedBanana.score} sessões</span>
+                       {selectedBanana.topSport && (
+                         <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">
+                           {sportIcon(selectedBanana.topSport)} {availableSports.find((s) => s.id === selectedBanana.topSport)?.name}
+                         </span>
+                       )}
                        {selectedBanana.isOnFire && <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80 flex items-center"><Flame className="w-3 h-3 mr-1 text-red-500" /> On Fire</span>}
                     </div>
                     {selectedBanana.userId !== currentUserId && (
@@ -972,7 +1015,7 @@ export default function App() {
   const [practicedSports, setPracticedSports] = useState<Record<string, number>>({});
   const [raios, setRaios] = useState(0);
   const [unlockedStoreSkins, setUnlockedStoreSkins] = useState<string[]>([]);
-  const [currentBananeira, setCurrentBananeira] = useState<{ id: string; name: string } | null>(null);
+  const [currentBananeira, setCurrentBananeira] = useState<{ id: string; name: string; founderId: string } | null>(null);
   const [pokeToast, setPokeToast] = useState<string>("");
 
   const loadProfile = async (userId: string) => {
@@ -1145,16 +1188,18 @@ export default function App() {
                   pokeToast={pokeToast}
                 />}
                 {currentScreen === "customization" && <CustomizationScreen onBack={() => setCurrentScreen("dashboard")} activeSkin={activeSkin} setActiveSkin={setActiveSkin} practicedSports={practicedSports} raios={raios} setRaios={setRaios} unlockedStoreSkins={unlockedStoreSkins} setUnlockedStoreSkins={setUnlockedStoreSkins} />}
-                {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name) => { saveProfileNow(); setCurrentBananeira({ id, name }); setCurrentScreen("bananeira-map"); }} />}
+                {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name, founderId) => { saveProfileNow(); setCurrentBananeira({ id, name, founderId }); setCurrentScreen("bananeira-map"); }} />}
                 {currentScreen === "bananeira-map" && currentBananeira && <BananeiraMapScreen
                   onBack={() => setCurrentScreen("bananeira-selection")}
                   bananeiraId={currentBananeira.id}
                   bananeiraName={currentBananeira.name}
+                  founderId={currentBananeira.founderId}
                   currentUserId={user?.id ?? ""}
                   currentUserName={buddyName || "Bananinha"}
                   currentUserSkin={activeSkin}
                   currentUserIsOnFire={isOnFire}
                   currentUserScore={sportSessionsTotal(practicedSports)}
+                  currentUserTopSport={topSportOf(practicedSports)}
                   practicedSports={practicedSports}
                   updateProgress={updateProgress}
                 />}

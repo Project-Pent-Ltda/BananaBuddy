@@ -14,11 +14,19 @@ export type BananeiraMember = {
   skin: string
   isOnFire: boolean
   score: number
+  topSport: string | null
 }
 
 export function sportSessionsTotal(practiced: Record<string, number> | null): number {
   if (!practiced) return 0
   return Object.values(practiced).reduce((a, b) => a + b, 0)
+}
+
+export function topSportOf(practiced: Record<string, number> | null): string | null {
+  if (!practiced) return null
+  const entries = Object.entries(practiced).filter(([, v]) => v > 0)
+  if (entries.length === 0) return null
+  return entries.reduce((best, cur) => (cur[1] > best[1] ? cur : best))[0]
 }
 
 export async function fetchMyBananeiras(): Promise<BananeiraOverview[]> {
@@ -65,6 +73,7 @@ export async function fetchBananeiraMembers(bananeiraId: string): Promise<Banane
       skin: profile?.active_skin || 'base',
       isOnFire: !!profile?.is_on_fire,
       score: sportSessionsTotal(profile?.practiced_sports),
+      topSport: topSportOf(profile?.practiced_sports),
     }
   })
 
