@@ -15,7 +15,12 @@ create table public.profiles (
   raios integer default 0,
   unlocked_store_skins text[] default '{}',
   onboarding_done boolean default false,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  -- Streak (GAP #3, db/streak.sql — adicionado em 2026-06-16)
+  current_streak integer default 0,
+  longest_streak integer default 0,
+  last_activity_date date,
+  streak_shields integer default 0
 );
 
 -- ============================================================

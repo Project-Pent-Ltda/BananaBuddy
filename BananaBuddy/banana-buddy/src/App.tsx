@@ -379,9 +379,10 @@ const OnboardingScreen = ({ onNext, buddyName, setBuddyName, practicedSports, to
   );
 };
 
-const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogout, buddyName, activeSkin, isOnFire, raios, pokeToast }: {
+const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogout, buddyName, activeSkin, isOnFire, raios, pokeToast, currentStreak, streakShields, streakBadgeTitle }: {
   onCustomization: () => void, onBananeiras: () => void, onAchievements: () => void, onLogout: () => void,
-  buddyName: string, activeSkin: string, isOnFire: boolean, raios: number, pokeToast?: string
+  buddyName: string, activeSkin: string, isOnFire: boolean, raios: number, pokeToast?: string,
+  currentStreak: number, streakShields: number, streakBadgeTitle: string | null
 }) => {
   return (
     <div className="relative h-full w-full flex flex-col bg-black overflow-hidden">
@@ -403,6 +404,19 @@ const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogo
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-white">{buddyName}</h1>
           <p className="text-xs text-banana uppercase tracking-widest font-bold">Nível 12 • Pro Fitness</p>
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <span className="flex items-center gap-1 text-xs font-bold text-white/80 bg-white/5 px-2 py-1 rounded-full">
+              🔥 {currentStreak} {currentStreak === 1 ? "dia" : "dias"}
+            </span>
+            {streakShields > 0 && (
+              <span className="flex items-center gap-1 text-xs font-bold text-white/80 bg-white/5 px-2 py-1 rounded-full">
+                🛡️ {streakShields}
+              </span>
+            )}
+          </div>
+          {streakBadgeTitle && (
+            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">🏅 {streakBadgeTitle}</p>
+          )}
         </div>
 
         <div className="flex-1 flex items-center justify-center relative px-2 mb-6 cursor-pointer group" onClick={onCustomization}>
@@ -773,11 +787,11 @@ const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, on
 type MapBanana = BananeiraMember & { x: number; y: number };
 
 const BananeiraMapScreen = ({
-  onBack, bananeiraId, bananeiraName, founderId, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore, currentUserTopSport,
+  onBack, bananeiraId, bananeiraName, founderId, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore, currentUserTopSport, currentUserStreak, currentUserStreakShields,
   practicedSports, updateProgress
 }: {
   onBack: () => void, bananeiraId: string, bananeiraName: string, founderId: string, currentUserId: string,
-  currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number, currentUserTopSport: string | null,
+  currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number, currentUserTopSport: string | null, currentUserStreak: number, currentUserStreakShields: number,
   practicedSports: Record<string, number>, updateProgress: (id: string, amt: number) => void
 }) => {
   const [selectedBanana, setSelectedBanana] = useState<MapBanana | null>(null);
@@ -805,7 +819,7 @@ const BananeiraMapScreen = ({
   const liveMembers: BananeiraMember[] = members
     .map((m) =>
       m.userId === currentUserId
-        ? { ...m, name: currentUserName, skin: currentUserSkin, isOnFire: currentUserIsOnFire, score: currentUserScore, topSport: currentUserTopSport }
+        ? { ...m, name: currentUserName, skin: currentUserSkin, isOnFire: currentUserIsOnFire, score: currentUserScore, topSport: currentUserTopSport, streak: currentUserStreak, shields: currentUserStreakShields }
         : m
     )
     .sort((a, b) => b.score - a.score);
@@ -880,6 +894,16 @@ const BananeiraMapScreen = ({
                     </h3>
                     <div className="flex gap-2 mt-2 flex-wrap">
                        <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">{selectedBanana.score} sessões</span>
+                       {selectedBanana.streak > 0 && (
+                         <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">
+                           🔥 {selectedBanana.streak} {selectedBanana.streak === 1 ? "dia" : "dias"}
+                         </span>
+                       )}
+                       {selectedBanana.shields > 0 && (
+                         <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">
+                           🛡️ {selectedBanana.shields}
+                         </span>
+                       )}
                        {selectedBanana.topSport && (
                          <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">
                            {sportIcon(selectedBanana.topSport)} {availableSports.find((s) => s.id === selectedBanana.topSport)?.name}
@@ -1020,6 +1044,21 @@ export default function App() {
   const [unlockedStoreSkins, setUnlockedStoreSkins] = useState<string[]>([]);
   const [currentBananeira, setCurrentBananeira] = useState<{ id: string; name: string; founderId: string } | null>(null);
   const [pokeToast, setPokeToast] = useState<string>("");
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
+  const [streakShields, setStreakShields] = useState(0);
+  const [lastActivityDate, setLastActivityDate] = useState<string | null>(null);
+
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const diffDays = (a: string, b: string) => Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
+
+  const STREAK_BADGES: { days: number; title: string }[] = [
+    { days: 90, title: "Lendário" },
+    { days: 30, title: "Inabalável" },
+    { days: 14, title: "Aura Dourada" },
+    { days: 7, title: "Persistente" },
+  ];
+  const streakBadge = (longest: number) => STREAK_BADGES.find((b) => longest >= b.days) ?? null;
 
   const loadProfile = async (userId: string) => {
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
@@ -1031,6 +1070,29 @@ export default function App() {
       setPracticedSports(data.practiced_sports ?? {});
       setRaios(data.raios ?? 0);
       setUnlockedStoreSkins(data.unlocked_store_skins ?? []);
+
+      let streak = data.current_streak ?? 0;
+      let shields = data.streak_shields ?? 0;
+      const lastActivity: string | null = data.last_activity_date ?? null;
+      if (lastActivity && streak > 0) {
+        const gap = diffDays(lastActivity, todayStr());
+        if (gap >= 2) {
+          if (gap === 2 && shields > 0) {
+            shields -= 1;
+          } else {
+            streak = 0;
+          }
+        }
+      }
+      setCurrentStreak(streak);
+      setLongestStreak(data.longest_streak ?? 0);
+      setStreakShields(shields);
+      setLastActivityDate(lastActivity);
+      if (streak !== (data.current_streak ?? 0) || shields !== (data.streak_shields ?? 0)) {
+        supabase.from('profiles').upsert({ id: userId, current_streak: streak, streak_shields: shields })
+          .then(({ error: reconcileError }) => { if (reconcileError) console.error('reconcileStreak save failed:', reconcileError); });
+      }
+
       setProfileLoaded(true);
       if (data.onboarding_done) setCurrentScreen('dashboard');
       else setCurrentScreen('health');
@@ -1052,6 +1114,10 @@ export default function App() {
         setPracticedSports({});
         setRaios(0);
         setUnlockedStoreSkins([]);
+        setCurrentStreak(0);
+        setLongestStreak(0);
+        setStreakShields(0);
+        setLastActivityDate(null);
         setCurrentScreen('login');
       }
       if (event === 'INITIAL_SESSION') setLoadingAuth(false);
@@ -1061,6 +1127,7 @@ export default function App() {
 
   const saveProfileNow = (overrides: Partial<{
     practicedSports: Record<string, number>; raios: number;
+    currentStreak: number; longestStreak: number; streakShields: number; lastActivityDate: string | null;
   }> = {}) => {
     if (!user) return;
     supabase.from('profiles').upsert({
@@ -1071,6 +1138,10 @@ export default function App() {
       practiced_sports: overrides.practicedSports ?? practicedSports,
       raios: overrides.raios ?? raios,
       unlocked_store_skins: unlockedStoreSkins,
+      current_streak: overrides.currentStreak ?? currentStreak,
+      longest_streak: overrides.longestStreak ?? longestStreak,
+      streak_shields: overrides.streakShields ?? streakShields,
+      last_activity_date: overrides.lastActivityDate ?? lastActivityDate,
     }).then(({ error }) => {
       if (error) console.error('saveProfileNow failed:', error);
     });
@@ -1080,7 +1151,23 @@ export default function App() {
     if (!user || !profileLoaded) return;
     const timer = setTimeout(saveProfileNow, 500);
     return () => clearTimeout(timer);
-  }, [raios, activeSkin, practicedSports, unlockedStoreSkins, isOnFire, buddyName]);
+  }, [raios, activeSkin, practicedSports, unlockedStoreSkins, isOnFire, buddyName, currentStreak, longestStreak, streakShields, lastActivityDate]);
+
+  const registerDailyActivity = () => {
+    const today = todayStr();
+    if (lastActivityDate === today) {
+      return { streak: currentStreak, longest: longestStreak, shields: streakShields, lastDate: today };
+    }
+    const gap = lastActivityDate ? diffDays(lastActivityDate, today) : null;
+    const nextStreak = gap === 1 ? currentStreak + 1 : 1;
+    const nextLongest = Math.max(longestStreak, nextStreak);
+    const nextShields = nextStreak === 7 ? streakShields + 1 : streakShields;
+    setCurrentStreak(nextStreak);
+    setLongestStreak(nextLongest);
+    setStreakShields(nextShields);
+    setLastActivityDate(today);
+    return { streak: nextStreak, longest: nextLongest, shields: nextShields, lastDate: today };
+  };
 
   useEffect(() => {
     if (!user || currentScreen !== 'dashboard') return;
@@ -1115,7 +1202,15 @@ export default function App() {
     const nextRaios = raios + 20 * amt;
     setPracticedSports(nextSports);
     setRaios(nextRaios);
-    saveProfileNow({ practicedSports: nextSports, raios: nextRaios });
+    const streakResult = registerDailyActivity();
+    saveProfileNow({
+      practicedSports: nextSports,
+      raios: nextRaios,
+      currentStreak: streakResult.streak,
+      longestStreak: streakResult.longest,
+      streakShields: streakResult.shields,
+      lastActivityDate: streakResult.lastDate,
+    });
   };
 
   if (loadingAuth) {
@@ -1189,6 +1284,9 @@ export default function App() {
                   isOnFire={isOnFire}
                   raios={raios}
                   pokeToast={pokeToast}
+                  currentStreak={currentStreak}
+                  streakShields={streakShields}
+                  streakBadgeTitle={streakBadge(longestStreak)?.title ?? null}
                 />}
                 {currentScreen === "customization" && <CustomizationScreen onBack={() => setCurrentScreen("dashboard")} activeSkin={activeSkin} setActiveSkin={setActiveSkin} practicedSports={practicedSports} raios={raios} setRaios={setRaios} unlockedStoreSkins={unlockedStoreSkins} setUnlockedStoreSkins={setUnlockedStoreSkins} />}
                 {currentScreen === "bananeira-selection" && <BananeiraSelectionScreen onBack={() => setCurrentScreen("dashboard")} onSelect={(id, name, founderId) => { saveProfileNow(); setCurrentBananeira({ id, name, founderId }); setCurrentScreen("bananeira-map"); }} />}
@@ -1203,6 +1301,8 @@ export default function App() {
                   currentUserIsOnFire={isOnFire}
                   currentUserScore={sportSessionsTotal(practicedSports)}
                   currentUserTopSport={topSportOf(practicedSports)}
+                  currentUserStreak={currentStreak}
+                  currentUserStreakShields={streakShields}
                   practicedSports={practicedSports}
                   updateProgress={updateProgress}
                 />}

@@ -4,6 +4,52 @@ Registro de checkpoints do desenvolvimento. Atualizado a cada sessão.
 
 ---
 
+## ✅ CHECKPOINT 6 — 2026-06-16: Streak real (GAP #3) + polish do mapa
+
+**O que foi feito:**
+- **Streak de verdade** (endereça GAP #3 do `GAPS.md`): 4 colunas novas em
+  `profiles` (`current_streak`, `longest_streak`, `last_activity_date`,
+  `streak_shields`) via `db/streak.sql` (já rodada pelo usuário no Supabase).
+  - `reconcileStreak` (dentro de `loadProfile`, `src/App.tsx`): ao abrir o app,
+    detecta dias perdidos. 1 dia perdido com escudo disponível → perdoa e
+    consome o escudo. 2+ dias sem escudo → zera o streak.
+  - `registerDailyActivity()`, chamada de dentro de `updateProgress` (usada
+    tanto na tela de Conquistas quanto no "Registrar treino" do mapa): soma
+    +1/dia, nunca duplica no mesmo dia, concede 1 escudo automaticamente ao
+    chegar em 7 dias.
+  - Badge de marco (🏅 Persistente/Aura Dourada/Inabalável/Lendário) baseado no
+    **maior streak já alcançado** (`longest_streak`), não no atual.
+  - UI: chip 🔥/🛡️/🏅 no Dashboard; chip 🔥 também no card de detalhe da
+    banana no mapa (`BananeiraMember` ganhou campo `streak`, lido via
+    `current_streak` em `lib/bananeiras.ts`).
+  - **Decisão explícita:** GAP #2 (a banana apodrecer visualmente com base em
+    tempo — os 7 estados de humor da PRD) **não foi tocado**, fica pra outra
+    sessão. `isOnFire`/mood continuam manuais, sem lógica de data.
+  - Testado ao vivo pelo usuário: ganhar o escudo aos 7 dias (simulado via SQL
+    pra não esperar dias reais) e exibição no Dashboard + mapa. ✅ funcionando.
+
+- **Bugs do mapa corrigidos** (sessão anterior, mesma rodada de commits):
+  - Cutucada: toast de status agora limpa sozinho depois de 3s (antes ficava
+    preso na tela pra sempre).
+  - Posição das bananas no mapa: trocada de aleatória (`Math.random`, diferente
+    por dispositivo/reload) para **determinística por hash do `userId`** — cada
+    pessoa sempre aparece no mesmo lugar, em qualquer dispositivo.
+  - Esconder o card de ranking não move mais as bananas: camada do mapa virou
+    `absolute inset-0` (tamanho fixo), header+ranking flutuam por cima sem
+    afetar o layout/porcentagens do mapa.
+
+**Pendente (registrado em `GAPS.md`, item 1, gaps secundários):**
+- Seed de dados demo (Bananeira de mentira com membros e sessões pra não
+  começar o pitch zerado).
+- Dar utilidade real à cutucada (hoje só é um toast social, sem efeito de jogo).
+- GAP #2 (decaimento visual da banana por tempo) — análise completa já feita
+  (ver histórico do chat anterior), só não implementada ainda.
+
+**⚠️ Não commitado ainda nesta sessão** (rodar `git status` pra confirmar):
+`db/streak.sql` (novo), `db/profiles.sql`, `lib/bananeiras.ts`, `src/App.tsx`.
+
+---
+
 ## ✅ CHECKPOINT 5 — 2026-06-15: Deploy no Vercel + fix do mapa de Bananeiras
 
 **O que foi feito:**
