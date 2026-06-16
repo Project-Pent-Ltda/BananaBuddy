@@ -934,14 +934,16 @@ const BananeiraMapScreen = ({
                 {b.userId === leaderId && (
                   <div className="absolute -top-[26px] left-1/2 -translate-x-1/2 text-base">👑</div>
                 )}
-                {decay.atRisk && (
-                  <div className="absolute -top-[26px] left-1/2 -translate-x-1/2 text-base">{decay.emoji}</div>
-                )}
-                <div
-                  className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase whitespace-nowrap text-white"
-                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.9)' }}
-                >
-                  {b.name}
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap relative">
+                  <span
+                    className="text-[9px] font-bold uppercase text-white"
+                    style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.9)' }}
+                  >
+                    {b.name}
+                  </span>
+                  {decay.atRisk && (
+                    <span className="absolute -right-4 top-1/2 -translate-y-1/2 text-[10px] leading-none">{decay.emoji}</span>
+                  )}
                 </div>
                 <BananaIcon mood={b.isOnFire ? "on-fire" : "happy"} size="sm" skin={b.skin} className={`transition-all hover:scale-110 ${decay.cssClass}`} animated={false} />
               </div>
