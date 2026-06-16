@@ -2,9 +2,15 @@
 
 > **Transformando o suor em diversão através da gamificação 3D e Realidade Aumentada.**
 
-![Status](https://img.shields.io/badge/Status-Investor_Ready-blue)
-![Tech](https://img.shields.io/badge/Stack-React_Native_%7C_Three.js_%7C_Node.js-green)
-![IA](https://img.shields.io/badge/IA-Detec%C3%A7%C3%A3o_de_Anomalias-orange)
+![Status](https://img.shields.io/badge/Status-Prot%C3%B3tipo_Acad%C3%AAmico-blue)
+![Tech](https://img.shields.io/badge/Stack-Vite_%7C_React_%7C_Supabase-green)
+![Projeto](https://img.shields.io/badge/Ibmec-2026.1-orange)
+
+> ⚠️ **Nota:** Este documento descreve a **visão-alvo** do produto (pitch). A
+> implementação atual é um **protótipo front-end** (Vite + React + Supabase). Os
+> recursos 3D/AR, React Native, geofencing e o backend Node/Redis/S3 descritos
+> abaixo são **roadmap**, não estão implementados. Para detalhes técnicos do que
+> de fato existe, veja [`CLAUDE.md`](CLAUDE.md). _(Demo online: a publicar.)_
 
 ---
 
