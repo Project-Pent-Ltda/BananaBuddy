@@ -16,6 +16,7 @@ export type BananeiraMember = {
   score: number
   topSport: string | null
   streak: number
+  longestStreak: number
   shields: number
   lastActivityDate: string | null
 }
@@ -62,7 +63,7 @@ export async function fetchBananeiraMembers(bananeiraId: string): Promise<Banane
 
   const { data: profileRows, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, buddy_name, active_skin, is_on_fire, practiced_sports, current_streak, streak_shields, last_activity_date')
+    .select('id, buddy_name, active_skin, is_on_fire, practiced_sports, current_streak, longest_streak, streak_shields, last_activity_date')
     .in('id', userIds)
   if (profilesError) throw profilesError
 
@@ -78,6 +79,7 @@ export async function fetchBananeiraMembers(bananeiraId: string): Promise<Banane
       score: sportSessionsTotal(profile?.practiced_sports),
       topSport: topSportOf(profile?.practiced_sports),
       streak: profile?.current_streak ?? 0,
+      longestStreak: profile?.longest_streak ?? 0,
       shields: profile?.streak_shields ?? 0,
       lastActivityDate: profile?.last_activity_date ?? null,
     }

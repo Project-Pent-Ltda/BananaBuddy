@@ -20,6 +20,16 @@
   }
 }
 
+@keyframes banana-sway {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(1.5px); }
+  75% { transform: translateX(-1.5px); }
+}
+
+.banana-sway {
+  animation: banana-sway var(--sway-duration, 3s) ease-in-out infinite;
+}
+
 @layer utilities {
   .glass {
     @apply bg-white/5 backdrop-blur-md border border-white/10;

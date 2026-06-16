@@ -102,8 +102,9 @@ function bananaDecayState(lastActivityDate: string | null, today: string): { sta
 
 // --- Components ---
 
-const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base", animated = true }: { className?: string, mood?: "happy" | "on-fire" | "dead" | "zen", size?: "sm" | "md" | "lg", skin?: string, animated?: boolean }) => {
+const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base", animated = true, motionAnimated, motionDuration = { rotate: 4, y: 2 } }: { className?: string, mood?: "happy" | "on-fire" | "dead" | "zen", size?: "sm" | "md" | "lg", skin?: string, animated?: boolean, motionAnimated?: boolean, motionDuration?: { rotate: number; y: number } }) => {
   const [frame, setFrame] = useState(1);
+  const shouldMotion = motionAnimated ?? animated;
 
   useEffect(() => {
     if (skin === "base" || !animated) return;
@@ -124,15 +125,15 @@ const BananaIcon = ({ className, mood = "happy", size = "md", skin = "base", ani
 
   return (
     <motion.div
-      initial={{ scale: 0.8, rotate: animated ? -5 : 0 }}
-      animate={animated ? {
+      initial={{ scale: 0.8, rotate: shouldMotion ? -5 : 0 }}
+      animate={shouldMotion ? {
         scale: 1,
         rotate: [ -5, 5, -5 ],
         y: [ 0, -10, 0 ]
       } : { scale: 1, rotate: 0, y: 0 }}
-      transition={animated ? {
-        rotate: { duration: 4, repeat: Infinity, ease: "easeInOut" },
-        y: { duration: 2, repeat: Infinity, ease: "easeInOut" }
+      transition={shouldMotion ? {
+        rotate: { duration: motionDuration.rotate, repeat: Infinity, ease: "easeInOut" },
+        y: { duration: motionDuration.y, repeat: Infinity, ease: "easeInOut" }
       } : { duration: 0.2 }}
       className={`relative flex items-center justify-center drop-shadow-2xl ${sizes[size]} ${className}`}
     >
@@ -404,7 +405,8 @@ type AppNotification =
   | { kind: "poke"; fromName: string }
   | { kind: "rescue"; rescuedName: string; bonus: number }
   | { kind: "resurrection-self"; bonus: number }
-  | { kind: "resurrection-witness"; fromName: string; bananeiraNome: string };
+  | { kind: "resurrection-witness"; fromName: string; bananeiraNome: string }
+  | { kind: "streak-shield"; badgeTitle: string };
 
 const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
   notification: AppNotification, onDismiss: () => void, onTrainNow: () => void
@@ -436,6 +438,14 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
       primaryBtn: null,
       dismissLabel: "Voltei!",
     };
+    if (n.kind === "streak-shield") return {
+      bananaMood: "happy" as const,
+      bananaClass: "mx-auto",
+      title: "7 dias seguidos! 🔥",
+      subtitle: `Você ganhou um escudo de streak 🛡️ e desbloqueou a medalha:`,
+      primaryBtn: null,
+      dismissLabel: "💪 Bora!",
+    };
     return {
       bananaMood: "happy" as const,
       bananaClass: "mx-auto",
@@ -457,13 +467,18 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
         <BananaIcon mood={config.bananaMood} size="md" skin="base" className={config.bananaClass} animated={n.kind === "resurrection-self"} />
         <h3 className="font-display text-lg font-bold text-white mt-3">{config.title}</h3>
         <p className="text-xs text-white/60 mt-1">{config.subtitle}</p>
+        {n.kind === "streak-shield" && (
+          <div className="inline-flex items-center gap-1 mt-3 px-4 py-1.5 rounded-full bg-banana/20 border border-banana/40 text-banana text-sm font-bold">
+            🏅 {n.badgeTitle}
+          </div>
+        )}
         <div className="flex flex-col gap-2 mt-5">
           {config.primaryBtn && (
             <Button onClick={config.primaryBtn.action} className="h-11 rounded-2xl bg-banana text-black font-bold text-sm">
               {config.primaryBtn.label}
             </Button>
           )}
-          <Button onClick={onDismiss} variant="ghost" className="h-11 rounded-2xl text-white/60 hover:text-white text-sm">
+          <Button onClick={onDismiss} variant="ghost" className="h-11 rounded-2xl text-white/60 hover:text-white hover:bg-white/10 text-sm">
             {config.dismissLabel}
           </Button>
         </div>
@@ -510,7 +525,9 @@ const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogo
             )}
           </div>
           {streakBadgeTitle && (
-            <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">🏅 {streakBadgeTitle}</p>
+            <span className="inline-flex items-center gap-1 mt-2 px-3 py-1 rounded-full bg-banana/20 border border-banana/40 text-banana text-[11px] font-bold uppercase tracking-wide">
+              🏅 {streakBadgeTitle}
+            </span>
           )}
           {decayText && (
             <p className={`text-[11px] font-bold mt-2 ${decay?.state === "podre" ? "text-red-400 uppercase tracking-wide" : "text-orange-400"}`}>
@@ -888,11 +905,11 @@ const BananeiraSelectionScreen = ({ onBack, onSelect }: { onBack: () => void, on
 type MapBanana = BananeiraMember & { x: number; y: number };
 
 const BananeiraMapScreen = ({
-  onBack, bananeiraId, bananeiraName, founderId, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore, currentUserTopSport, currentUserStreak, currentUserStreakShields, currentUserLastActivity,
+  onBack, bananeiraId, bananeiraName, founderId, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore, currentUserTopSport, currentUserStreak, currentUserLongestStreak, currentUserStreakShields, currentUserLastActivity,
   practicedSports, updateProgress
 }: {
   onBack: () => void, bananeiraId: string, bananeiraName: string, founderId: string, currentUserId: string,
-  currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number, currentUserTopSport: string | null, currentUserStreak: number, currentUserStreakShields: number, currentUserLastActivity: string | null,
+  currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number, currentUserTopSport: string | null, currentUserStreak: number, currentUserLongestStreak: number, currentUserStreakShields: number, currentUserLastActivity: string | null,
   practicedSports: Record<string, number>, updateProgress: (id: string, amt: number) => void
 }) => {
   const [selectedBanana, setSelectedBanana] = useState<MapBanana | null>(null);
@@ -915,16 +932,20 @@ const BananeiraMapScreen = ({
     fetchBananeiraMembers(bananeiraId).then(setMembers).catch((e) => console.error('fetchBananeiraMembers failed:', e)).finally(() => setLoading(false));
   };
 
+  const silentRefresh = () => {
+    fetchBananeiraMembers(bananeiraId).then(setMembers).catch(() => {});
+  };
+
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 5000);
+    const interval = setInterval(silentRefresh, 5000);
     return () => clearInterval(interval);
   }, [bananeiraId]);
 
   const liveMembers: BananeiraMember[] = members
     .map((m) =>
       m.userId === currentUserId
-        ? { ...m, name: currentUserName, skin: currentUserSkin, isOnFire: currentUserIsOnFire, score: currentUserScore, topSport: currentUserTopSport, streak: currentUserStreak, shields: currentUserStreakShields, lastActivityDate: currentUserLastActivity }
+        ? { ...m, name: currentUserName, skin: currentUserSkin, isOnFire: currentUserIsOnFire, score: currentUserScore, topSport: currentUserTopSport, streak: currentUserStreak, longestStreak: currentUserLongestStreak, shields: currentUserStreakShields, lastActivityDate: currentUserLastActivity }
         : m
     )
     .sort((a, b) => b.score - a.score);
@@ -984,7 +1005,7 @@ const BananeiraMapScreen = ({
                     <span className="absolute -right-4 top-1/2 -translate-y-1/2 text-[10px] leading-none">{decay.emoji}</span>
                   )}
                 </div>
-                <BananaIcon mood={b.isOnFire ? "on-fire" : "happy"} size="sm" skin={b.skin} className={`transition-all hover:scale-110 ${decay.cssClass}`} animated={false} />
+                <BananaIcon mood={b.isOnFire ? "on-fire" : "happy"} size="sm" skin={b.skin} className={`transition-all hover:scale-110 ${decay.cssClass}`} animated={false} motionAnimated={true} motionDuration={{ rotate: 8, y: 4 }} />
               </div>
             </motion.div>
           );
@@ -1025,6 +1046,11 @@ const BananeiraMapScreen = ({
                          </span>
                        )}
                        {selectedBanana.isOnFire && <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80 flex items-center"><Flame className="w-3 h-3 mr-1 text-red-500" /> On Fire</span>}
+                       {streakBadge(selectedBanana.streak) && (
+                         <span className="text-xs px-2 py-1 rounded-md font-bold bg-banana/20 border border-banana/40 text-banana">
+                           🏅 {streakBadge(selectedBanana.streak)!.title}
+                         </span>
+                       )}
                        {decay.atRisk && (
                          <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">
                            {decay.emoji} Banana em risco
@@ -1152,6 +1178,14 @@ const BananeiraMapScreen = ({
   );
 };
 
+const STREAK_BADGES: { days: number; title: string }[] = [
+  { days: 90, title: "Lendário" },
+  { days: 30, title: "Inabalável" },
+  { days: 14, title: "Aura Dourada" },
+  { days: 7, title: "Persistente" },
+];
+const streakBadge = (longest: number) => STREAK_BADGES.find((b) => longest >= b.days) ?? null;
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("splash");
   const [user, setUser] = useState<User | null>(null);
@@ -1171,13 +1205,7 @@ export default function App() {
   const [supportCount, setSupportCount] = useState(0);
   const [notificationQueue, setNotificationQueue] = useState<AppNotification[]>([]);
 
-  const STREAK_BADGES: { days: number; title: string }[] = [
-    { days: 90, title: "Lendário" },
-    { days: 30, title: "Inabalável" },
-    { days: 14, title: "Aura Dourada" },
-    { days: 7, title: "Persistente" },
-  ];
-  const streakBadge = (longest: number) => STREAK_BADGES.find((b) => longest >= b.days) ?? null;
+
 
   const loadProfile = async (userId: string) => {
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
@@ -1363,6 +1391,10 @@ export default function App() {
         registerResurrection(currentBananeira.id).catch(() => {});
       }
     }
+    if (streakResult.shields > streakShields) {
+      const badge = streakBadge(streakResult.longest);
+      setNotificationQueue((prev: AppNotification[]) => [...prev, { kind: "streak-shield" as const, badgeTitle: badge?.title ?? "Persistente" }]);
+    }
     redeemPendingPokes().catch(() => {});
   };
 
@@ -1438,7 +1470,7 @@ export default function App() {
                   raios={raios}
                   currentStreak={currentStreak}
                   streakShields={streakShields}
-                  streakBadgeTitle={streakBadge(longestStreak)?.title ?? null}
+                  streakBadgeTitle={streakBadge(currentStreak)?.title ?? null}
                   supportCount={supportCount}
                   lastActivityDate={lastActivityDate}
                 />}
@@ -1456,6 +1488,7 @@ export default function App() {
                   currentUserScore={sportSessionsTotal(practicedSports)}
                   currentUserTopSport={topSportOf(practicedSports)}
                   currentUserStreak={currentStreak}
+                  currentUserLongestStreak={longestStreak}
                   currentUserStreakShields={streakShields}
                   currentUserLastActivity={lastActivityDate}
                   practicedSports={practicedSports}

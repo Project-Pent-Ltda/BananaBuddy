@@ -2,7 +2,7 @@
 
 Diagnóstico honesto do protótipo atual comparado à tese do produto: **"Gym Rats, mas gamificado"** — um app de fitness social (feed + ranking + prova de treino) com um avatar-banana que reflete emocionalmente o esforço do usuário.
 
-Documento de backlog priorizado. Atualizado em 2026-06-15.
+Documento de backlog priorizado. Atualizado em 2026-06-16.
 
 ---
 
@@ -23,39 +23,78 @@ Verificado em `src/App.tsx` (~980 linhas, arquivo único).
 | Avatar (skins) | ✅ Real | 9 skins, unlock por conquista/loja, grid de customização |
 | Persistência (Supabase) | ✅ Real | 6 campos persistidos com debounce |
 | Auth (login/cadastro) | ✅ Real | Supabase Auth, tabs Entrar/Cadastrar |
-| Moods da banana | 🟡 Mock | happy/on-fire/dead/zen — toggle manual, sem tempo |
-| Bananeiras (social) | ✅ Real | Criar/entrar por código, ranking real (soma de sessões), cutucar |
+| Moods da banana | 🟡 Parcial | happy/on-fire/dead via `bananaDecayState()` baseado em `lastActivityDate`; estados intermediários sem arte nova (filtro CSS) |
+| Bananeiras (social) | ✅ Real | Criar/entrar por código, ranking real (soma de sessões), cutucar com loop de resgate |
 | Registro de treino | 🔴 Raso | Botão "+1" → +20 raios, sem data/duração/prova |
 | Integração de saúde | 🔴 Fachada | Toggles Apple/Google sem nenhuma chamada de API |
-| Streak | ❌ Ausente | Texto "5" hardcoded no mapa, sem lógica |
+| Streak | ✅ Real | Contador de dias seguidos, escudo a cada 7 dias, badge de título por marco |
+| Decaimento (visual) | ✅ Real | Filtros CSS por dias sem treinar; 3 estágios no mapa e no Dashboard |
+| Ressurreição | ✅ Real | Modal dramático ao treinar com banana podre; co-membros notificados |
 
 ---
 
 ## Fraquezas em ordem de impacto
 
-### 1. ✅ O loop social — ENDEREÇADO (2026-06-15)
-As Bananeiras agora são reais, backed por Supabase: criar/entrar por código (RPC `create_bananeira`/`join_bananeira`), membros e ranking computados de verdade (`bananeira_overview`, `bananeira_members` × `profiles`), e "Cutucar" via tabela `pokes` com checagem de não-vistos no dashboard. Sem real-time — atualização por refresh manual (decisão do usuário). Ver `db/bananeiras.sql` e `lib/bananeiras.ts`.
+### 1. ✅ O loop social — CONCLUÍDO (2026-06-15 / 2026-06-16)
 
-Mapa com fundo pixel art, pódio/destaque do líder, esporte principal e badge de fundador por membro, registro de treino direto do mapa (2026-06-16).
+As Bananeiras são reais, backed por Supabase: criar/entrar por código (RPC `create_bananeira`/`join_bananeira`), membros e ranking computados de verdade (`bananeira_overview`, `bananeira_members` × `profiles`).
 
-**Pendente (gaps secundários, não bloqueiam o pitch):**
+**Cutucada com utilidade real (2026-06-16):**
+- Membros em risco (2+ dias sem treinar) aparecem com filtro de decaimento + emoji de estado no mapa.
+- Botão muda para "🍌 Cutucar pra salvar!" em vez de cutucar genérico.
+- Cutucado recebe pop-up modal central com "Treinar agora" / "Depois".
+- Se o cutucado treinar em 24h: quem cutucou ganha +10 raios + badge 🤝 Apoiador ×N + modal de confirmação.
+- Migration: `db/poke_rescue.sql` (tabela `rescue_notifications`, RPC `redeem_pending_pokes`).
+
+Mapa com fundo pixel art, pódio/destaque do líder, esporte principal e badge de fundador por membro, registro de treino direto do mapa, polling silencioso a cada 5s.
+
+**Pendente (não bloqueia pitch):**
 - **Seeding de contas demo** — Bananeira de demonstração com 2-3 membros e `practiced_sports` preenchido, pra não começar com ranking zerado.
-- **Utilidade real da cutucada** — hoje é só um toast social, sem efeito de jogo (não dá raios, não afeta streak/On Fire, sem limite diário). Avaliar dar peso à mecânica (ex.: pequeno bônus a quem cutuca, ou penalidade por ignorar).
 
-### 2. 🔴 A banana não apodrece de verdade
-O gancho emocional inteiro — "se você sumir, sua banana apodrece" — **não funciona** (`App.tsx:421`):
-- O estado é um toggle manual (`setIsOnFire`), não há lógica de data, streak nem decaimento.
-- Só existe o estado `dead`; faltam os intermediários (Amadurecendo, Quase Podre) que o PRD define.
-- Sem tempo, a banana não tem **stakes** — e stakes é o que vende o conceito no pitch.
+### 2. 🟡 A banana apodrece — PARCIALMENTE ENDEREÇADO (2026-06-16)
 
-### 3. 🔴 Não existe streak
-Zero contador de dias seguidos, zero escudos, zero marcos (`App.tsx:834-840`). Streak é metade da mecânica de gamificação descrita no PRD e simplesmente não existe.
+Helper `bananaDecayState()` implementado com os estados do PRD §4.2 via **filtros CSS** (sem arte nova):
+
+| Dias sem treinar | Estado | Efeito visual |
+|-----------------|--------|---------------|
+| 0–1 | Saudável | sem filtro |
+| 2–3 | 😐 Amadurecendo | sépia leve |
+| 4–6 | 😰 Quase Podre | sépia forte + grayscale |
+| 7+ | 💀 Podre | grayscale + escuro + mood `dead` |
+
+Aplicado no mapa (banana de cada membro) e no Dashboard (banana própria + texto de urgência colorido: "SUA BANANA APODRECEU. Ressuscita!").
+
+**Ressurreição (2026-06-16):** ao treinar com banana podre, modal dramático "+50 raios, sua banana voltou dos mortos! 🍌🔥"; co-membros recebem notificação no próximo acesso ao Dashboard. Migration: `db/resurrection.sql`.
+
+**Pendente:**
+- Estados intermediários (Amadurecendo / Quase Podre) no Dashboard dependem de novos sprites — atualmente só o estado `dead` muda o frame da banana própria; os outros dois são só filtro.
+
+### 3. ✅ Streak — CONCLUÍDO (2026-06-16)
+
+Streak de dias consecutivos totalmente implementado e persistido no Supabase:
+
+- Contador de dias seguidos exibido no Dashboard e no card do mapa.
+- **Escudo** (`streak_shields`): ganho a cada 7 dias de streak. Protege contra 1 falta (gap de 2 dias sem treinar); gap ≥ 3 dias zera o streak mesmo com escudo.
+- **Badges de título** baseadas no streak atual (não no recorde histórico — somem se o streak cair):
+
+| Streak | Badge |
+|--------|-------|
+| 7 dias | 🏅 Persistente |
+| 14 dias | 🏅 Aura Dourada |
+| 30 dias | 🏅 Inabalável |
+| 90 dias | 🏅 Lendário |
+
+- Badge exibida como chip dourado no Dashboard e no card do mapa.
+- Modal de conquista ao bater 7 dias: banana animada + chip `🏅 Persistente` em destaque.
+- Script de demo: `db/seed_demo_streak.sql` — deixa o usuário com streak=6, shields=0, last_activity=ontem. **Após rodar o SQL, recarregar o app antes de treinar** (estado em memória não sincroniza automaticamente com o banco).
 
 ### 4. 🟡 Registrar treino é um botão "+1"
+
 Sem prova, sem data, sem duração. Clica +1 e ganha 20 raios. O Gym Rats exige **foto de prova** — é o que dá legitimidade. Aqui é trivialmente "fraudável" e não há conceito real de sessão.
 
 ### 5. 🟡 Integração de saúde é só toggle
-Apple Health / Google Fit são switches visuais sem nenhuma chamada de API (`App.tsx:267-315`). Aceitável para pitch acadêmico, desde que fique claro que é fachada.
+
+Apple Health / Google Fit são switches visuais sem nenhuma chamada de API. Aceitável para pitch acadêmico, desde que fique claro que é fachada.
 
 ---
 
@@ -68,7 +107,7 @@ Apple Health / Google Fit são switches visuais sem nenhuma chamada de API (`App
 
 ## Recomendação para máximo impacto no pitch
 
-As duas alavancas de maior retorno, ambas demonstráveis e de escopo contido:
+O essencial está pronto. O que ainda agrega:
 
-1. **Streak + decaimento real** — tornar a banana apodrecer/melhorar com base em tempo e dias seguidos. Alto impacto visual, escopo de ~1 tela, fortalece o gancho emocional.
-2. **Um loop social real** — pelo menos um ranking computado de verdade dentro de uma Bananeira (mesmo com membros semeados), para a tese de pressão social deixar de ser fachada.
+1. **Seeding de contas demo** — sem membros na Bananeira, o loop social não fica demonstrável ao vivo. Único item urgente restante.
+2. **Sprites dos estados intermediários** — só se houver arte disponível; filtro CSS já cobre o pitch.
