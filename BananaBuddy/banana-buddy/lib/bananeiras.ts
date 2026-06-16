@@ -17,6 +17,7 @@ export type BananeiraMember = {
   topSport: string | null
   streak: number
   shields: number
+  lastActivityDate: string | null
 }
 
 export function sportSessionsTotal(practiced: Record<string, number> | null): number {
@@ -61,7 +62,7 @@ export async function fetchBananeiraMembers(bananeiraId: string): Promise<Banane
 
   const { data: profileRows, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, buddy_name, active_skin, is_on_fire, practiced_sports, current_streak, streak_shields')
+    .select('id, buddy_name, active_skin, is_on_fire, practiced_sports, current_streak, streak_shields, last_activity_date')
     .in('id', userIds)
   if (profilesError) throw profilesError
 
@@ -78,6 +79,7 @@ export async function fetchBananeiraMembers(bananeiraId: string): Promise<Banane
       topSport: topSportOf(profile?.practiced_sports),
       streak: profile?.current_streak ?? 0,
       shields: profile?.streak_shields ?? 0,
+      lastActivityDate: profile?.last_activity_date ?? null,
     }
   })
 
@@ -106,5 +108,26 @@ export async function fetchUnseenPokes(): Promise<{ id: string; fromName: string
 export async function markPokesSeen(ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const { error } = await supabase.from('pokes').update({ seen: true }).in('id', ids)
+  if (error) throw error
+}
+
+export async function redeemPendingPokes(): Promise<number> {
+  const { data, error } = await supabase.rpc('redeem_pending_pokes')
+  if (error) throw error
+  return (data as number) ?? 0
+}
+
+export async function fetchUnseenRescues(): Promise<{ id: string; rescuedName: string; bonus: number }[]> {
+  const { data, error } = await supabase
+    .from('rescue_notifications')
+    .select('id, rescued_name, bonus')
+    .eq('seen', false)
+  if (error) throw error
+  return (data ?? []).map((r: any) => ({ id: r.id, rescuedName: r.rescued_name, bonus: r.bonus }))
+}
+
+export async function markRescuesSeen(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const { error } = await supabase.from('rescue_notifications').update({ seen: true }).in('id', ids)
   if (error) throw error
 }
