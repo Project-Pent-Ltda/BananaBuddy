@@ -21,6 +21,7 @@ import {
   Calendar,
   ImagePlus,
   Watch,
+  Newspaper,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -40,8 +41,10 @@ import {
   sportSessionsTotal,
   topSportOf,
   createCheckin,
+  fetchBananeiraFeed,
   type BananeiraOverview,
   type BananeiraMember,
+  type FeedCheckin,
 } from "@/lib/bananeiras";
 import type { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
@@ -93,6 +96,17 @@ function isSkinUnlocked(skin: SkinDef, ctx: { unlockedStoreSkins: string[]; prac
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const diffDays = (a: string, b: string) => Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
+
+const timeAgo = (iso: string): string => {
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (secs < 60) return "agora";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+};
 
 // Estados de decaimento da banana (PRD §4.2) — fatia do GAP #2, usada hoje só no mapa de Bananeiras
 type DecayState = "novo" | "saudavel" | "amadurecendo" | "quase-podre" | "podre";
@@ -1208,6 +1222,9 @@ const BananeiraMapScreen = ({
   const [pokeStatus, setPokeStatus] = useState<string>("");
   const [showRegister, setShowRegister] = useState(false);
   const [showRanking, setShowRanking] = useState(true);
+  const [showFeed, setShowFeed] = useState(false);
+  const [feed, setFeed] = useState<FeedCheckin[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
   const positionFor = (userId: string) => {
     let hash = 0;
     for (let i = 0; i < userId.length; i++) hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
@@ -1231,6 +1248,21 @@ const BananeiraMapScreen = ({
     const interval = setInterval(silentRefresh, 5000);
     return () => clearInterval(interval);
   }, [bananeiraId]);
+
+  const loadFeed = (showSpinner = true) => {
+    if (showSpinner) setFeedLoading(true);
+    fetchBananeiraFeed(bananeiraId)
+      .then(setFeed)
+      .catch((e) => console.error('fetchBananeiraFeed failed:', e))
+      .finally(() => setFeedLoading(false));
+  };
+
+  useEffect(() => {
+    if (!showFeed) return;
+    loadFeed();
+    const interval = setInterval(() => loadFeed(false), 5000);
+    return () => clearInterval(interval);
+  }, [showFeed, bananeiraId]);
 
   const liveMembers: BananeiraMember[] = members
     .map((m) =>
@@ -1412,6 +1444,9 @@ const BananeiraMapScreen = ({
           <div className="font-display font-bold text-white">{bananeiraName}</div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => setShowFeed(true)}>
+            <Newspaper className="w-5 h-5" />
+          </Button>
           <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => setShowRegister(true)}>
             <Plus className="w-5 h-5" />
           </Button>
@@ -1464,6 +1499,89 @@ const BananeiraMapScreen = ({
         {pokeStatus && <div className="text-[10px] text-banana font-bold mt-2 bg-black/40 backdrop-blur-sm rounded-lg px-2 py-1 inline-block">{pokeStatus}</div>}
       </div>
       </div>
+
+      {/* Feed de check-ins */}
+      <AnimatePresence>
+        {showFeed && (
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 40 }}
+            className="absolute inset-0 z-40 bg-black flex flex-col"
+          >
+            <div className="flex items-center justify-between px-6 pt-12 pb-3 border-b border-white/10">
+              <Button variant="ghost" size="icon" className="text-white w-9 h-9" onClick={() => setShowFeed(false)}>
+                <ChevronRight className="w-5 h-5 rotate-180" />
+              </Button>
+              <div className="text-center">
+                <div className="text-[10px] uppercase tracking-[2px] text-banana font-bold">Feed da Bananeira</div>
+                <div className="font-display font-bold text-white text-sm">{bananeiraName}</div>
+              </div>
+              <Button variant="ghost" size="icon" className="text-white w-9 h-9" onClick={() => loadFeed()}>
+                <Zap className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <ScrollArea className="flex-1">
+              <div className="flex flex-col gap-4 px-4 py-4">
+                {feedLoading && feed.length === 0 && (
+                  <p className="text-center text-white/40 text-sm py-10">Carregando feed...</p>
+                )}
+                {!feedLoading && feed.length === 0 && (
+                  <div className="text-center text-white/40 text-sm py-10">
+                    <Camera className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    Nenhum check-in ainda.<br />Seja o primeiro a registrar um treino! 🍌
+                  </div>
+                )}
+                {feed.map((c) => {
+                  const sport = availableSports.find((s) => s.id === c.sportId);
+                  const chips = [
+                    c.duracao && { label: "⏱", value: c.duracao },
+                    c.distancia && { label: "📍", value: `${c.distancia} km` },
+                    c.calorias && { label: "🔥", value: `${c.calorias} kcal` },
+                    c.passos && { label: "👟", value: c.passos },
+                  ].filter(Boolean) as { label: string; value: string }[];
+                  return (
+                    <div key={c.id} className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden">
+                      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                        <BananaIcon skin={c.authorSkin} size="sm" animated={false} className="w-9 h-9 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-white truncate">
+                            {c.authorName} {c.authorId === currentUserId && <span className="text-white/40 font-normal">(Você)</span>}
+                          </div>
+                          <div className="text-[10px] text-white/40">{timeAgo(c.createdAt)} atrás</div>
+                        </div>
+                        {sport && (
+                          <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80 shrink-0">
+                            {sport.icon} {sport.name}
+                          </span>
+                        )}
+                      </div>
+                      <img src={c.photoUrl} alt="Foto do treino" className="w-full aspect-square object-cover" />
+                      <div className="px-4 py-3 flex flex-col gap-2">
+                        {c.title && <div className="text-sm font-bold text-white">{c.title}</div>}
+                        {c.description && <div className="text-xs text-white/60">{c.description}</div>}
+                        {chips.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {chips.map((chip, i) => (
+                              <span key={i} className="text-[11px] bg-white/5 px-2 py-1 rounded-md text-white/70">
+                                {chip.label} {chip.value}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 text-[10px] text-green-400/80 mt-1">
+                          <Check className="w-3 h-3" /> Prova válida
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
