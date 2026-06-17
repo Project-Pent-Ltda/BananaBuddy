@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "motion/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import {
   Apple,
   Chrome,
@@ -15,7 +15,11 @@ import {
   Check,
   LogOut,
   Eye,
-  EyeOff
+  EyeOff,
+  Camera,
+  MapPin,
+  Calendar,
+  ImagePlus,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -406,7 +410,8 @@ type AppNotification =
   | { kind: "rescue"; rescuedName: string; bonus: number }
   | { kind: "resurrection-self"; bonus: number }
   | { kind: "resurrection-witness"; fromName: string; bananeiraNome: string }
-  | { kind: "streak-shield"; badgeTitle: string };
+  | { kind: "streak-shield"; badgeTitle: string }
+  | { kind: "checkin-done"; photoDataUrl: string; sportName: string };
 
 const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
   notification: AppNotification, onDismiss: () => void, onTrainNow: () => void
@@ -446,6 +451,15 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
       primaryBtn: null,
       dismissLabel: "💪 Bora!",
     };
+    if (n.kind === "checkin-done") return {
+      bananaMood: "on-fire" as const,
+      bananaClass: "mx-auto",
+      title: `Check-in publicado! 🍌`,
+      subtitle: `${n.sportName} registrado. +20 raios ⚡`,
+      primaryBtn: null,
+      dismissLabel: "💪",
+    };
+    // resurrection-witness
     return {
       bananaMood: "happy" as const,
       bananaClass: "mx-auto",
@@ -464,7 +478,11 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
         exit={{ opacity: 0, scale: 0.9, y: 10 }}
         className="bg-[#111] border border-white/10 rounded-3xl p-6 w-full max-w-xs text-center shadow-2xl"
       >
-        <BananaIcon mood={config.bananaMood} size="md" skin="base" className={config.bananaClass} animated={n.kind === "resurrection-self"} />
+        {n.kind === "checkin-done" ? (
+          <img src={n.photoDataUrl} alt="Foto do treino" className="w-24 h-24 object-cover rounded-2xl mx-auto" />
+        ) : (
+          <BananaIcon mood={config.bananaMood} size="md" skin="base" className={config.bananaClass} animated={n.kind === "resurrection-self"} />
+        )}
         <h3 className="font-display text-lg font-bold text-white mt-3">{config.title}</h3>
         <p className="text-xs text-white/60 mt-1">{config.subtitle}</p>
         {n.kind === "streak-shield" && (
@@ -483,6 +501,201 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
           </Button>
         </div>
       </motion.div>
+    </div>
+  );
+};
+
+const CheckInModal = ({
+  initialSportId,
+  onPublish,
+  onClose,
+}: {
+  initialSportId: string | null;
+  onPublish: (sportId: string, photoDataUrl: string) => void;
+  onClose: () => void;
+}) => {
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [selectedSportId, setSelectedSportId] = useState(initialSportId ?? availableSports[0].id);
+  const [titulo, setTitulo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [duracao, setDuracao] = useState("");
+  const [distancia, setDistancia] = useState("");
+  const [calorias, setCalorias] = useState("");
+  const [passos, setPassos] = useState("");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoStatus, setGeoStatus] = useState<"loading" | "ok" | "denied">("loading");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const now = new Date();
+  const formattedTime =
+    now.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) +
+    ", " +
+    now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  useEffect(() => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGeoStatus("ok");
+      },
+      () => {
+        setCoords({ lat: -23.0033, lng: -43.3822 });
+        setGeoStatus("denied");
+      }
+    );
+  }, []);
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoDataUrl(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const canPublish = !!photoDataUrl && !!selectedSportId;
+  const metrics = [
+    { label: "Duração", value: duracao, set: setDuracao },
+    { label: "Distância (km)", value: distancia, set: setDistancia },
+    { label: "Calorias", value: calorias, set: setCalorias },
+    { label: "Passos", value: passos, set: setPassos },
+  ];
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-12 pb-3 border-b border-white/10">
+        <Button variant="ghost" size="icon" className="text-white w-9 h-9" onClick={onClose}>
+          <ChevronRight className="w-5 h-5 rotate-180" />
+        </Button>
+        <span className="font-display font-bold text-white text-sm">Novo check-in</span>
+        <Button
+          variant="ghost"
+          className={`text-sm font-bold px-3 h-9 ${canPublish ? "text-red-400 hover:text-red-300" : "text-white/30"}`}
+          disabled={!canPublish}
+          onClick={() => canPublish && onPublish(selectedSportId, photoDataUrl!)}
+        >
+          Publicar
+        </Button>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="flex flex-col gap-3 px-4 pt-4 pb-8">
+
+          {/* Foto */}
+          <div
+            className="w-full h-44 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center cursor-pointer relative overflow-hidden"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {photoDataUrl ? (
+              <>
+                <img src={photoDataUrl} alt="Foto do treino" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                  <Check className="w-3 h-3 text-green-400" /> Válido
+                </div>
+                <div className="absolute bottom-2 left-2 bg-black/60 rounded-full p-1.5">
+                  <Camera className="w-3.5 h-3.5 text-white" />
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-white/40">
+                <ImagePlus className="w-7 h-7" />
+                <span className="text-xs">Toque para adicionar foto</span>
+              </div>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          {/* Título + Descrição */}
+          <div className="bg-[#111] border border-white/10 rounded-2xl p-4 flex flex-col gap-3">
+            <input
+              className="bg-transparent text-white text-sm font-medium outline-none placeholder:text-white/30 w-full"
+              placeholder="Título"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+            />
+            <div className="h-px bg-white/10" />
+            <input
+              className="bg-transparent text-white/60 text-xs outline-none placeholder:text-white/30 w-full"
+              placeholder="Descrição (opcional)"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+            />
+          </div>
+
+          {/* Hora + Localização */}
+          <div className="bg-[#111] border border-white/10 rounded-2xl p-4 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <Calendar className="w-4 h-4 text-white/40 shrink-0" />
+              <span className="text-xs text-white/60 flex-1">Hora do check-in</span>
+              <span className="text-xs text-white/80">{formattedTime}</span>
+            </div>
+            <div className="h-px bg-white/10" />
+            <div className="flex items-center gap-3">
+              <MapPin className="w-4 h-4 text-white/40 shrink-0" />
+              <span className="text-xs text-white/60 flex-1">Localização</span>
+              <span className="text-xs text-white/80">
+                {geoStatus === "loading"
+                  ? "Obtendo…"
+                  : coords
+                  ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
+                  : "—"}
+              </span>
+            </div>
+          </div>
+
+          {/* Atividade */}
+          <div className="bg-[#111] border border-white/10 rounded-2xl p-4">
+            <p className="text-[10px] uppercase tracking-widest text-white/40 mb-3">Atividade</p>
+            <div className="flex flex-col gap-1">
+              {availableSports.map((sport) => (
+                <button
+                  key={sport.id}
+                  onClick={() => setSelectedSportId(sport.id)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors ${
+                    selectedSportId === sport.id
+                      ? "bg-banana/20 border border-banana/40"
+                      : "hover:bg-white/5 border border-transparent"
+                  }`}
+                >
+                  <span className="text-lg">{sport.icon}</span>
+                  <span className={`text-sm font-medium flex-1 ${selectedSportId === sport.id ? "text-banana" : "text-white/80"}`}>
+                    {sport.name}
+                  </span>
+                  {selectedSportId === sport.id && <Check className="w-4 h-4 text-banana" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Métricas */}
+          <div className="bg-[#111] border border-white/10 rounded-2xl p-4 flex flex-col gap-3">
+            {metrics.map(({ label, value, set }, i) => (
+              <div key={label}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-white/60">{label}</span>
+                  <input
+                    type="number"
+                    className="bg-transparent text-xs text-white/80 text-right outline-none w-24 placeholder:text-white/30"
+                    placeholder="—"
+                    value={value}
+                    onChange={(e) => set(e.target.value)}
+                  />
+                </div>
+                {i < metrics.length - 1 && <div className="h-px bg-white/10 mt-3" />}
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </ScrollArea>
     </div>
   );
 };
@@ -565,9 +778,9 @@ const DashboardScreen = ({ onCustomization, onBananeiras, onAchievements, onLogo
   );
 };
 
-const AchievementsScreen = ({ onBack, practicedSports, toggleSport, updateProgress, isOnFire, setIsOnFire, raios }: { 
-  onBack: () => void, practicedSports: Record<string, number>, toggleSport: (id: string, forceDelete?: boolean) => void, 
-  updateProgress: (id: string, amt: number) => void, isOnFire: boolean, setIsOnFire: (val: boolean) => void, raios: number 
+const AchievementsScreen = ({ onBack, practicedSports, toggleSport, onRegister, isOnFire, setIsOnFire, raios }: {
+  onBack: () => void, practicedSports: Record<string, number>, toggleSport: (id: string, forceDelete?: boolean) => void,
+  onRegister: (sportId: string) => void, isOnFire: boolean, setIsOnFire: (val: boolean) => void, raios: number
 }) => {
   const [goalText, setGoalText] = useState("");
   const [deletingSport, setDeletingSport] = useState<string | null>(null);
@@ -637,8 +850,8 @@ const AchievementsScreen = ({ onBack, practicedSports, toggleSport, updateProgre
                     
                     {!isComplete && (
                       <div className="flex items-center gap-2 mt-2">
-                        <Button size="sm" onClick={() => updateProgress(id, 1)} className="flex-1 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white flex items-center justify-center gap-1">
-                          <Plus className="w-3 h-3"/> 1 Progresso <span className="text-banana ml-1 flex items-center"><Zap className="w-3 h-3"/> 20</span>
+                        <Button size="sm" onClick={() => onRegister(id)} className="flex-1 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white flex items-center justify-center gap-1">
+                          <Camera className="w-3 h-3"/> Registrar treino
                         </Button>
                         <Button 
                           size="sm" 
@@ -1204,6 +1417,8 @@ export default function App() {
   const [lastActivityDate, setLastActivityDate] = useState<string | null>(null);
   const [supportCount, setSupportCount] = useState(0);
   const [notificationQueue, setNotificationQueue] = useState<AppNotification[]>([]);
+  const [showCheckIn, setShowCheckIn] = useState(false);
+  const [checkInSportId, setCheckInSportId] = useState<string | null>(null);
 
 
 
@@ -1398,6 +1613,21 @@ export default function App() {
     redeemPendingPokes().catch(() => {});
   };
 
+  const openCheckIn = (sportId: string | null) => {
+    setCheckInSportId(sportId);
+    setShowCheckIn(true);
+  };
+
+  const submitCheckIn = (sportId: string, photoDataUrl: string) => {
+    const sport = availableSports.find((s) => s.id === sportId);
+    setShowCheckIn(false);
+    updateProgress(sportId, 1);
+    setNotificationQueue((prev: AppNotification[]) => [
+      ...prev,
+      { kind: "checkin-done" as const, photoDataUrl, sportName: sport?.name ?? "Treino" },
+    ]);
+  };
+
   if (loadingAuth) {
     return (
       <div className="min-h-screen w-full bg-black flex items-center justify-center">
@@ -1494,8 +1724,17 @@ export default function App() {
                   practicedSports={practicedSports}
                   updateProgress={updateProgress}
                 />}
-                {currentScreen === "achievements" && <AchievementsScreen onBack={() => setCurrentScreen("dashboard")} practicedSports={practicedSports} toggleSport={toggleSport} updateProgress={updateProgress} isOnFire={isOnFire} setIsOnFire={setIsOnFire} raios={raios} />}
+                {currentScreen === "achievements" && <AchievementsScreen onBack={() => setCurrentScreen("dashboard")} practicedSports={practicedSports} toggleSport={toggleSport} onRegister={openCheckIn} isOnFire={isOnFire} setIsOnFire={setIsOnFire} raios={raios} />}
               </motion.div>
+            </AnimatePresence>
+            <AnimatePresence>
+              {showCheckIn && (
+                <CheckInModal
+                  initialSportId={checkInSportId}
+                  onPublish={submitCheckIn}
+                  onClose={() => setShowCheckIn(false)}
+                />
+              )}
             </AnimatePresence>
             <AnimatePresence>
               {notificationQueue[0] && (
