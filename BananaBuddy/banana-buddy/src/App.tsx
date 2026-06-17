@@ -1,7 +1,6 @@
 import { motion, AnimatePresence } from "motion/react";
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import {
-  Apple,
   Chrome,
   Lock,
   Plus,
@@ -246,6 +245,17 @@ const LoginScreen = ({ onSuccess }: { onSuccess: () => void }) => {
     onSuccess();
   };
 
+  const handleGoogleLogin = async () => {
+    setError('');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) { console.error('Google login error:', error); setError('Erro ao conectar com o Google.'); }
+    // Em caso de sucesso, o navegador redireciona pro Google; o retorno é
+    // capturado pelo onAuthStateChange no App.
+  };
+
   return (
     <div className="relative h-full w-full flex flex-col px-8 py-10 bg-black overflow-y-auto">
       <div className="flex flex-col items-center gap-1 mb-8 mt-8">
@@ -286,10 +296,7 @@ const LoginScreen = ({ onSuccess }: { onSuccess: () => void }) => {
               <span className="text-[10px] text-white/30 uppercase tracking-widest">ou</span>
               <div className="flex-1 h-px bg-white/10" />
             </div>
-            <Button className="h-12 rounded-3xl bg-white text-black hover:bg-white/90 font-bold flex items-center justify-center gap-3">
-              <Apple className="w-5 h-5 fill-current" /> Continuar com Apple
-            </Button>
-            <Button className="h-12 rounded-3xl bg-white text-black hover:bg-white/90 font-bold flex items-center justify-center gap-3">
+            <Button onClick={handleGoogleLogin} className="h-12 rounded-3xl bg-white text-black hover:bg-white/90 font-bold flex items-center justify-center gap-3">
               <Chrome className="w-5 h-5 text-blue-500" /> Continuar com Google
             </Button>
           </>
