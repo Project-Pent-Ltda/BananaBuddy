@@ -2,7 +2,7 @@
 
 Diagnóstico honesto do protótipo atual comparado à tese do produto: **"Gym Rats, mas gamificado"** — um app de fitness social (feed + ranking + prova de treino) com um avatar-banana que reflete emocionalmente o esforço do usuário.
 
-Documento de backlog priorizado. Atualizado em 2026-06-16.
+Documento de backlog priorizado. Atualizado em 2026-06-17.
 
 ---
 
@@ -22,11 +22,12 @@ Verificado em `src/App.tsx` (~980 linhas, arquivo único).
 |------|--------|--------------|
 | Avatar (skins) | ✅ Real | 9 skins, unlock por conquista/loja, grid de customização |
 | Persistência (Supabase) | ✅ Real | 6 campos persistidos com debounce |
-| Auth (login/cadastro) | ✅ Real | Supabase Auth, tabs Entrar/Cadastrar |
+| Auth (login/cadastro) | ✅ Real | Supabase Auth, tabs Entrar/Cadastrar + login Google (OAuth) |
 | Moods da banana | 🟡 Parcial | happy/on-fire/dead via `bananaDecayState()` baseado em `lastActivityDate`; estados intermediários sem arte nova (filtro CSS) |
 | Bananeiras (social) | ✅ Real | Criar/entrar por código, ranking real (soma de sessões), cutucar com loop de resgate |
-| Registro de treino | 🔴 Raso | Botão "+1" → +20 raios, sem data/duração/prova |
-| Integração de saúde | 🔴 Fachada | Toggles Apple/Google sem nenhuma chamada de API |
+| Registro de treino | ✅ Real | Check-in com foto de prova (câmera/galeria), GPS real, métricas; persistido (Storage + tabela `checkins`) |
+| Feed social | ✅ Real | Feed da Bananeira com check-ins dos membros, foto ampliada (lightbox), polling 5s |
+| Integração de saúde | 🔴 Fachada | Toggles Apple/Google sem chamada de API (ver §5 — Apple Health inviável em web) |
 | Streak | ✅ Real | Contador de dias seguidos, escudo a cada 7 dias, badge de título por marco |
 | Decaimento (visual) | ✅ Real | Filtros CSS por dias sem treinar; 3 estágios no mapa e no Dashboard |
 | Ressurreição | ✅ Real | Modal dramático ao treinar com banana podre; co-membros notificados |
@@ -88,13 +89,29 @@ Streak de dias consecutivos totalmente implementado e persistido no Supabase:
 - Modal de conquista ao bater 7 dias: banana animada + chip `🏅 Persistente` em destaque.
 - Script de demo: `db/seed_demo_streak.sql` — deixa o usuário com streak=6, shields=0, last_activity=ontem. **Após rodar o SQL, recarregar o app antes de treinar** (estado em memória não sincroniza automaticamente com o banco).
 
-### 4. 🟡 Registrar treino é um botão "+1"
+### 4. ✅ Registrar treino com foto de prova — CONCLUÍDO (2026-06-17)
 
-Sem prova, sem data, sem duração. Clica +1 e ganha 20 raios. O Gym Rats exige **foto de prova** — é o que dá legitimidade. Aqui é trivialmente "fraudável" e não há conceito real de sessão.
+O antigo botão "+1" virou um fluxo de **check-in com foto**, no estilo Gym Rats:
 
-### 5. 🟡 Integração de saúde é só toggle
+- **Foto de prova:** `<input type="file" accept="image/*">` — abre câmera **ou** galeria no celular, seletor de arquivos no desktop. Preview + selo "✓ Válido".
+- **Localização real:** `navigator.geolocation` pega lat/long de verdade (com fallback mockado se negar a permissão).
+- **Formulário estilo Gym Rats:** Atividade (seletor de esporte), Título, Descrição, Duração, Distância, Calorias, Passos. Hora automática.
+- **Pontos de entrada unificados:** tela de Conquistas ("Registrar treino") e o "+" do mapa da Bananeira abrem o **mesmo** `CheckInModal` (com slide-up animado). O fluxo antigo "+1" foi removido.
+- **Persistência real:** a foto sobe pro **Supabase Storage** (bucket `checkins`, público) e o check-in vira linha na tabela `checkins`. Migration: `db/checkins.sql` (RLS: leitura liberada a co-membros via `shares_bananeira`).
+- **Feed da Bananeira:** botão 📰 no mapa abre o feed com os check-ins de todos os membros (linhas compactas: miniatura + título + autor + horário). Tocar numa linha abre a **foto ampliada** (lightbox) com esporte, métricas e selo "Prova válida". Polling a cada 5s. Funções: `createCheckin` / `fetchBananeiraFeed` em `lib/bananeiras.ts`.
 
-Apple Health / Google Fit são switches visuais sem nenhuma chamada de API. Aceitável para pitch acadêmico, desde que fique claro que é fachada.
+Publicar continua somando raios/streak via `updateProgress`, então o ranking reflete o treino + agora há a prova social com foto.
+
+### 5. 🟡 Integração de saúde — diagnosticada; login Google feito (2026-06-17)
+
+**Login social:** o botão "Continuar com Google" agora é **real** (Supabase Auth `signInWithOAuth`, provider Google configurado). O botão da Apple foi **removido** (Sign in with Apple exige conta paga de Apple Developer). `loadProfile` ficou robusto: cria profile padrão para contas OAuth novas.
+
+**Integração de dados de saúde (Apple Health / Google Fit) — segue fachada, por restrição técnica real:**
+- **Apple Health:** **inviável** em web app — HealthKit é framework nativo iOS, não tem API web.
+- **Google Fit:** REST API descontinuada (migrando pro Health Connect, Android-nativo) + verificação chata.
+- **Caminho viável (não implementado, decidido adiar):** **Strava** (OAuth + REST web-friendly) — puxaria treino real (distância/duração/calorias) pra auto-preencher o check-in. Custo: ~meio dia + 1 função serverless (troca de token com `client_secret`).
+
+Aceitável manter como fachada para o pitch acadêmico, desde que fique claro.
 
 ---
 
@@ -107,7 +124,8 @@ Apple Health / Google Fit são switches visuais sem nenhuma chamada de API. Acei
 
 ## Recomendação para máximo impacto no pitch
 
-O essencial está pronto. O que ainda agrega:
+Os dois pilares da tese (prova social com foto + banana que apodrece) e o registro de treino estão prontos e persistidos. O que ainda agrega:
 
-1. **Seeding de contas demo** — sem membros na Bananeira, o loop social não fica demonstrável ao vivo. Único item urgente restante.
-2. **Sprites dos estados intermediários** — só se houver arte disponível; filtro CSS já cobre o pitch.
+1. **Seeding de contas demo** — sem membros na Bananeira, o loop social e o feed não ficam demonstráveis ao vivo. Único item urgente restante.
+2. **Integração Strava (opcional)** — única integração de saúde realmente viável em web; auto-preencheria o check-in com treino real. Decisão adiada (ver §5).
+3. **Sprites dos estados intermediários** — só se houver arte disponível; filtro CSS já cobre o pitch.
