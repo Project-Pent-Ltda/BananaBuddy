@@ -593,7 +593,13 @@ const CheckInModal = ({
   ];
 
   return (
-    <div className="absolute inset-0 z-50 bg-black flex flex-col">
+    <motion.div
+      initial={{ opacity: 0, y: "100%" }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: "100%" }}
+      transition={{ type: "spring", damping: 30, stiffness: 300 }}
+      className="absolute inset-0 z-50 bg-black flex flex-col"
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-12 pb-3 border-b border-white/10">
         <Button variant="ghost" size="icon" className="text-white w-9 h-9" onClick={onClose}>
@@ -787,7 +793,7 @@ const CheckInModal = ({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 };
 
