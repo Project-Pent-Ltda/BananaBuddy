@@ -154,3 +154,112 @@ export async function markResurrectionsSeen(ids: string[]): Promise<void> {
   const { error } = await supabase.from('resurrection_notifications').update({ seen: true }).in('id', ids)
   if (error) throw error
 }
+
+// ============================================================
+// Check-ins (feed com foto de prova)
+// ============================================================
+
+export type CheckinInput = {
+  sportId: string
+  photoDataUrl: string
+  title: string
+  description: string
+  duracao: string
+  distancia: string
+  calorias: string
+  passos: string
+}
+
+export type FeedCheckin = {
+  id: string
+  authorId: string
+  authorName: string
+  authorSkin: string
+  sportId: string
+  photoUrl: string
+  title: string
+  description: string
+  duracao: string
+  distancia: string
+  calorias: string
+  passos: string
+  createdAt: string
+}
+
+// Faz upload da foto para o Storage e cria o registro do check-in.
+export async function createCheckin(input: CheckinInput): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser()
+  const userId = auth.user?.id
+  if (!userId) throw new Error('Não autenticado')
+
+  // dataURL -> Blob para o upload
+  const blob = await (await fetch(input.photoDataUrl)).blob()
+  const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('checkins')
+    .upload(path, blob, { contentType: blob.type, upsert: false })
+  if (uploadError) throw uploadError
+
+  const { data: urlData } = supabase.storage.from('checkins').getPublicUrl(path)
+
+  const { error: insertError } = await supabase.from('checkins').insert({
+    author_id: userId,
+    sport_id: input.sportId,
+    photo_url: urlData.publicUrl,
+    title: input.title,
+    description: input.description,
+    duracao: input.duracao,
+    distancia: input.distancia,
+    calorias: input.calorias,
+    passos: input.passos,
+  })
+  if (insertError) throw insertError
+}
+
+// Feed de uma Bananeira: check-ins de todos os membros, mais recentes primeiro.
+export async function fetchBananeiraFeed(bananeiraId: string, limit = 30): Promise<FeedCheckin[]> {
+  const { data: memberRows, error: membersError } = await supabase
+    .from('bananeira_members')
+    .select('user_id')
+    .eq('bananeira_id', bananeiraId)
+  if (membersError) throw membersError
+
+  const userIds = (memberRows ?? []).map((row) => row.user_id as string)
+  if (userIds.length === 0) return []
+
+  const { data: checkinRows, error: checkinsError } = await supabase
+    .from('checkins')
+    .select('*')
+    .in('author_id', userIds)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (checkinsError) throw checkinsError
+  if (!checkinRows || checkinRows.length === 0) return []
+
+  const { data: profileRows } = await supabase
+    .from('profiles')
+    .select('id, buddy_name, active_skin')
+    .in('id', userIds)
+  const profileById = new Map((profileRows ?? []).map((p: any) => [p.id as string, p]))
+
+  return checkinRows.map((c: any) => {
+    const profile = profileById.get(c.author_id)
+    return {
+      id: c.id,
+      authorId: c.author_id,
+      authorName: profile?.buddy_name || 'Banana',
+      authorSkin: profile?.active_skin || 'base',
+      sportId: c.sport_id,
+      photoUrl: c.photo_url,
+      title: c.title ?? '',
+      description: c.description ?? '',
+      duracao: c.duracao ?? '',
+      distancia: c.distancia ?? '',
+      calorias: c.calorias ?? '',
+      passos: c.passos ?? '',
+      createdAt: c.created_at,
+    }
+  })
+}

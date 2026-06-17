@@ -39,6 +39,7 @@ import {
   markResurrectionsSeen,
   sportSessionsTotal,
   topSportOf,
+  createCheckin,
   type BananeiraOverview,
   type BananeiraMember,
 } from "@/lib/bananeiras";
@@ -457,8 +458,8 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
       bananaClass: "mx-auto",
       title: `Check-in publicado! 🍌`,
       subtitle: `${n.sportName} registrado. +20 raios ⚡`,
-      primaryBtn: null,
-      dismissLabel: "💪",
+      primaryBtn: { label: "Boa! 💪", action: onDismiss },
+      dismissLabel: null,
     };
     // resurrection-witness
     return {
@@ -497,13 +498,26 @@ const NotificationModal = ({ notification, onDismiss, onTrainNow }: {
               {config.primaryBtn.label}
             </Button>
           )}
-          <Button onClick={onDismiss} variant="ghost" className="h-11 rounded-2xl text-white/60 hover:text-white hover:bg-white/10 text-sm">
-            {config.dismissLabel}
-          </Button>
+          {config.dismissLabel && (
+            <Button onClick={onDismiss} variant="ghost" className="h-11 rounded-2xl text-white/60 hover:text-white hover:bg-white/10 text-sm">
+              {config.dismissLabel}
+            </Button>
+          )}
         </div>
       </motion.div>
     </div>
   );
+};
+
+type CheckInPayload = {
+  sportId: string;
+  photoDataUrl: string;
+  titulo: string;
+  descricao: string;
+  duracao: string;
+  distancia: string;
+  calorias: string;
+  passos: string;
 };
 
 const CheckInModal = ({
@@ -512,7 +526,7 @@ const CheckInModal = ({
   onClose,
 }: {
   initialSportId: string | null;
-  onPublish: (sportId: string, photoDataUrl: string) => void;
+  onPublish: (payload: CheckInPayload) => void;
   onClose: () => void;
 }) => {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
@@ -576,7 +590,19 @@ const CheckInModal = ({
           variant="ghost"
           className={`text-sm font-bold px-3 h-9 ${canPublish ? "text-red-400 hover:text-red-300" : "text-white/30"}`}
           disabled={!canPublish}
-          onClick={() => canPublish && onPublish(selectedSportId, photoDataUrl!)}
+          onClick={() =>
+            canPublish &&
+            onPublish({
+              sportId: selectedSportId!,
+              photoDataUrl: photoDataUrl!,
+              titulo,
+              descricao,
+              duracao,
+              distancia,
+              calorias,
+              passos,
+            })
+          }
         >
           Publicar
         </Button>
@@ -1669,14 +1695,25 @@ export default function App() {
     setShowCheckIn(true);
   };
 
-  const submitCheckIn = (sportId: string, photoDataUrl: string) => {
-    const sport = availableSports.find((s) => s.id === sportId);
+  const submitCheckIn = (payload: CheckInPayload) => {
+    const sport = availableSports.find((s) => s.id === payload.sportId);
     setShowCheckIn(false);
-    updateProgress(sportId, 1);
+    updateProgress(payload.sportId, 1);
     setNotificationQueue((prev: AppNotification[]) => [
       ...prev,
-      { kind: "checkin-done" as const, photoDataUrl, sportName: sport?.name ?? "Treino" },
+      { kind: "checkin-done" as const, photoDataUrl: payload.photoDataUrl, sportName: sport?.name ?? "Treino" },
     ]);
+    // Persiste o check-in (foto no Storage + linha em checkins) em background.
+    createCheckin({
+      sportId: payload.sportId,
+      photoDataUrl: payload.photoDataUrl,
+      title: payload.titulo,
+      description: payload.descricao,
+      duracao: payload.duracao,
+      distancia: payload.distancia,
+      calorias: payload.calorias,
+      passos: payload.passos,
+    }).catch((e) => console.error('createCheckin failed:', e));
   };
 
   if (loadingAuth) {
