@@ -1630,8 +1630,23 @@ export default function App() {
 
 
   const loadProfile = async (userId: string) => {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    let { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
     if (error) console.error('loadProfile failed:', error);
+
+    // Conta nova (ex.: login via Google) sem profile ainda — cria um padrão.
+    if (!data) {
+      const metaName = (user?.user_metadata?.name as string | undefined)
+        ?? (user?.user_metadata?.full_name as string | undefined)
+        ?? '';
+      const { data: created, error: createError } = await supabase
+        .from('profiles')
+        .upsert({ id: userId, buddy_name: metaName }, { onConflict: 'id' })
+        .select('*')
+        .maybeSingle();
+      if (createError) console.error('create profile failed:', createError);
+      data = created ?? null;
+    }
+
     if (data) {
       setBuddyName(data.buddy_name ?? '');
       setActiveSkin(data.active_skin ?? 'base');
@@ -1692,7 +1707,7 @@ export default function App() {
         setNotificationQueue([]);
         setCurrentScreen('login');
       }
-      if (event === 'INITIAL_SESSION') setLoadingAuth(false);
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') setLoadingAuth(false);
     });
     return () => subscription.unsubscribe();
   }, []);
