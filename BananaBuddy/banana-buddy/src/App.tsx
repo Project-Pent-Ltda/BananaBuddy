@@ -1210,21 +1210,21 @@ type MapBanana = BananeiraMember & { x: number; y: number };
 
 const BananeiraMapScreen = ({
   onBack, bananeiraId, bananeiraName, founderId, currentUserId, currentUserName, currentUserSkin, currentUserIsOnFire, currentUserScore, currentUserTopSport, currentUserStreak, currentUserLongestStreak, currentUserStreakShields, currentUserLastActivity,
-  practicedSports, updateProgress
+  onRegister
 }: {
   onBack: () => void, bananeiraId: string, bananeiraName: string, founderId: string, currentUserId: string,
   currentUserName: string, currentUserSkin: string, currentUserIsOnFire: boolean, currentUserScore: number, currentUserTopSport: string | null, currentUserStreak: number, currentUserLongestStreak: number, currentUserStreakShields: number, currentUserLastActivity: string | null,
-  practicedSports: Record<string, number>, updateProgress: (id: string, amt: number) => void
+  onRegister: (sportId: string | null) => void
 }) => {
   const [selectedBanana, setSelectedBanana] = useState<MapBanana | null>(null);
   const [members, setMembers] = useState<BananeiraMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [pokeStatus, setPokeStatus] = useState<string>("");
-  const [showRegister, setShowRegister] = useState(false);
   const [showRanking, setShowRanking] = useState(true);
   const [showFeed, setShowFeed] = useState(false);
   const [feed, setFeed] = useState<FeedCheckin[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
+  const [expandedCheckin, setExpandedCheckin] = useState<FeedCheckin | null>(null);
   const positionFor = (userId: string) => {
     let hash = 0;
     for (let i = 0; i < userId.length; i++) hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
@@ -1391,47 +1391,6 @@ const BananeiraMapScreen = ({
             );
           })()}
         </AnimatePresence>
-
-        <AnimatePresence>
-          {showRegister && (
-            <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="absolute bottom-6 left-6 right-6 z-30">
-              <div className="bg-[#111] border border-white/10 rounded-[24px] p-5 shadow-2xl relative overflow-hidden max-h-[60vh] overflow-y-auto">
-                <Button size="icon" variant="ghost" className="absolute top-2 right-2 w-8 h-8 rounded-full text-white/40 hover:text-white z-10" onClick={() => setShowRegister(false)}>
-                  ✕
-                </Button>
-                <h3 className="font-display text-lg font-bold text-white mb-3">Registrar treino</h3>
-                {Object.keys(practicedSports).length === 0 && (
-                  <p className="text-xs text-white/30 italic">Nenhum esporte ativo no momento.</p>
-                )}
-                <div className="flex flex-col gap-2">
-                  {Object.entries(practicedSports).map(([id, prog]) => {
-                    const sport = availableSports.find((s) => s.id === id);
-                    if (!sport) return null;
-                    const isComplete = prog >= sport.target;
-                    return (
-                      <div key={id} className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">{sport.icon}</span>
-                          <div>
-                            <div className="text-sm font-bold text-white">{sport.name}</div>
-                            <div className="text-[10px] text-banana uppercase tracking-widest">
-                              {isComplete ? "Concluído" : `${prog} / ${sport.target} ${sport.unit}`}
-                            </div>
-                          </div>
-                        </div>
-                        {!isComplete && (
-                          <Button size="sm" onClick={() => updateProgress(id, 1)} className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white flex items-center gap-1">
-                            <Plus className="w-3 h-3" /> 1 sessão
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       <div className="absolute top-0 left-0 right-0 z-20 flex flex-col">
@@ -1447,7 +1406,7 @@ const BananeiraMapScreen = ({
           <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => setShowFeed(true)}>
             <Newspaper className="w-5 h-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => setShowRegister(true)}>
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={() => onRegister(null)}>
             <Plus className="w-5 h-5" />
           </Button>
           <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white" onClick={refresh}>
@@ -1523,7 +1482,7 @@ const BananeiraMapScreen = ({
             </div>
 
             <ScrollArea className="flex-1">
-              <div className="flex flex-col gap-4 px-4 py-4">
+              <div className="flex flex-col gap-2 px-4 py-4">
                 {feedLoading && feed.length === 0 && (
                   <p className="text-center text-white/40 text-sm py-10">Carregando feed...</p>
                 )}
@@ -1535,52 +1494,92 @@ const BananeiraMapScreen = ({
                 )}
                 {feed.map((c) => {
                   const sport = availableSports.find((s) => s.id === c.sportId);
-                  const chips = [
-                    c.duracao && { label: "⏱", value: c.duracao },
-                    c.distancia && { label: "📍", value: `${c.distancia} km` },
-                    c.calorias && { label: "🔥", value: `${c.calorias} kcal` },
-                    c.passos && { label: "👟", value: c.passos },
-                  ].filter(Boolean) as { label: string; value: string }[];
                   return (
-                    <div key={c.id} className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden">
-                      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-                        <BananaIcon skin={c.authorSkin} size="sm" animated={false} className="w-9 h-9 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-white truncate">
-                            {c.authorName} {c.authorId === currentUserId && <span className="text-white/40 font-normal">(Você)</span>}
-                          </div>
-                          <div className="text-[10px] text-white/40">{timeAgo(c.createdAt)} atrás</div>
-                        </div>
-                        {sport && (
-                          <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80 shrink-0">
-                            {sport.icon} {sport.name}
-                          </span>
-                        )}
+                    <button
+                      key={c.id}
+                      onClick={() => setExpandedCheckin(c)}
+                      className="flex items-center gap-3 bg-[#111] border border-white/10 rounded-2xl p-3 text-left hover:bg-white/5 transition-colors"
+                    >
+                      <div className="relative w-12 h-12 shrink-0">
+                        <img src={c.photoUrl} alt="Foto do treino" className="w-12 h-12 rounded-lg object-cover" />
+                        {sport && <span className="absolute -bottom-1 -right-1 text-sm">{sport.icon}</span>}
                       </div>
-                      <img src={c.photoUrl} alt="Foto do treino" className="w-full aspect-square object-cover" />
-                      <div className="px-4 py-3 flex flex-col gap-2">
-                        {c.title && <div className="text-sm font-bold text-white">{c.title}</div>}
-                        {c.description && <div className="text-xs text-white/60">{c.description}</div>}
-                        {chips.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {chips.map((chip, i) => (
-                              <span key={i} className="text-[11px] bg-white/5 px-2 py-1 rounded-md text-white/70">
-                                {chip.label} {chip.value}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1 text-[10px] text-green-400/80 mt-1">
-                          <Check className="w-3 h-3" /> Prova válida
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-white truncate">{c.title || sport?.name || "Treino"}</div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-white/50 mt-0.5">
+                          <BananaIcon skin={c.authorSkin} size="sm" animated={false} className="w-4 h-4 shrink-0" />
+                          <span className="truncate">{c.authorName}{c.authorId === currentUserId && " (Você)"}</span>
                         </div>
                       </div>
-                    </div>
+                      <div className="text-[10px] text-white/40 shrink-0">{timeAgo(c.createdAt)}</div>
+                    </button>
                   );
                 })}
               </div>
             </ScrollArea>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* Foto ampliada (lightbox) */}
+      <AnimatePresence>
+        {expandedCheckin && (() => {
+          const c = expandedCheckin;
+          const sport = availableSports.find((s) => s.id === c.sportId);
+          const chips = [
+            c.duracao && { label: "⏱", value: c.duracao },
+            c.distancia && { label: "📍", value: `${c.distancia} km` },
+            c.calorias && { label: "🔥", value: `${c.calorias} kcal` },
+            c.passos && { label: "👟", value: c.passos },
+          ].filter(Boolean) as { label: string; value: string }[];
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 bg-black flex flex-col"
+            >
+              <div className="flex items-center gap-3 px-4 pt-12 pb-3">
+                <BananaIcon skin={c.authorSkin} size="sm" animated={false} className="w-9 h-9 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-white truncate">
+                    {c.authorName}{c.authorId === currentUserId && <span className="text-white/40 font-normal"> (Você)</span>}
+                  </div>
+                  <div className="text-[10px] text-white/40">{timeAgo(c.createdAt)} atrás</div>
+                </div>
+                <Button variant="ghost" size="icon" className="text-white w-9 h-9" onClick={() => setExpandedCheckin(null)}>
+                  ✕
+                </Button>
+              </div>
+
+              <div className="flex-1 flex items-center justify-center px-2 min-h-0">
+                <img src={c.photoUrl} alt="Foto do treino" className="max-w-full max-h-full object-contain rounded-2xl" />
+              </div>
+
+              <div className="px-5 py-4 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  {sport && (
+                    <span className="text-xs bg-white/10 px-2 py-1 rounded-md text-white/80">{sport.icon} {sport.name}</span>
+                  )}
+                  <span className="flex items-center gap-1 text-[10px] text-green-400/80">
+                    <Check className="w-3 h-3" /> Prova válida
+                  </span>
+                </div>
+                {c.title && <div className="text-base font-bold text-white">{c.title}</div>}
+                {c.description && <div className="text-sm text-white/60">{c.description}</div>}
+                {chips.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {chips.map((chip, i) => (
+                      <span key={i} className="text-[11px] bg-white/5 px-2 py-1 rounded-md text-white/70">
+                        {chip.label} {chip.value}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
     </div>
   );
@@ -1927,8 +1926,7 @@ export default function App() {
                   currentUserLongestStreak={longestStreak}
                   currentUserStreakShields={streakShields}
                   currentUserLastActivity={lastActivityDate}
-                  practicedSports={practicedSports}
-                  updateProgress={updateProgress}
+                  onRegister={openCheckIn}
                 />}
                 {currentScreen === "achievements" && <AchievementsScreen onBack={() => setCurrentScreen("dashboard")} practicedSports={practicedSports} toggleSport={toggleSport} onRegister={openCheckIn} isOnFire={isOnFire} setIsOnFire={setIsOnFire} raios={raios} />}
               </motion.div>
