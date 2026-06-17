@@ -20,6 +20,7 @@ import {
   MapPin,
   Calendar,
   ImagePlus,
+  Watch,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -515,7 +516,8 @@ const CheckInModal = ({
   onClose: () => void;
 }) => {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
-  const [selectedSportId, setSelectedSportId] = useState(initialSportId ?? availableSports[0].id);
+  const [selectedSportId, setSelectedSportId] = useState<string | null>(initialSportId);
+  const [showActivityPicker, setShowActivityPicker] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
   const [duracao, setDuracao] = useState("");
@@ -554,9 +556,10 @@ const CheckInModal = ({
   };
 
   const canPublish = !!photoDataUrl && !!selectedSportId;
+  const selectedSport = availableSports.find((s) => s.id === selectedSportId) ?? null;
   const metrics = [
     { label: "Duração", value: duracao, set: setDuracao },
-    { label: "Distância (km)", value: distancia, set: setDistancia },
+    { label: "Distância (quilômetros)", value: distancia, set: setDistancia },
     { label: "Calorias", value: calorias, set: setCalorias },
     { label: "Passos", value: passos, set: setPassos },
   ];
@@ -608,7 +611,6 @@ const CheckInModal = ({
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -651,51 +653,100 @@ const CheckInModal = ({
             </div>
           </div>
 
-          {/* Atividade */}
-          <div className="bg-[#111] border border-white/10 rounded-2xl p-4">
-            <p className="text-[10px] uppercase tracking-widest text-white/40 mb-3">Atividade</p>
-            <div className="flex flex-col gap-1">
-              {availableSports.map((sport) => (
-                <button
-                  key={sport.id}
-                  onClick={() => setSelectedSportId(sport.id)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors ${
-                    selectedSportId === sport.id
-                      ? "bg-banana/20 border border-banana/40"
-                      : "hover:bg-white/5 border border-transparent"
-                  }`}
-                >
-                  <span className="text-lg">{sport.icon}</span>
-                  <span className={`text-sm font-medium flex-1 ${selectedSportId === sport.id ? "text-banana" : "text-white/80"}`}>
-                    {sport.name}
-                  </span>
-                  {selectedSportId === sport.id && <Check className="w-4 h-4 text-banana" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Métricas */}
+          {/* Atividade + Métricas */}
           <div className="bg-[#111] border border-white/10 rounded-2xl p-4 flex flex-col gap-3">
-            {metrics.map(({ label, value, set }, i) => (
+            <button
+              onClick={() => setShowActivityPicker(true)}
+              className="flex items-center gap-3 w-full text-left"
+            >
+              <span className="text-sm text-white/80 flex-1">Atividade</span>
+              {selectedSport ? (
+                <span className="text-sm text-white/80 flex items-center gap-1">
+                  <span>{selectedSport.icon}</span> {selectedSport.name}
+                </span>
+              ) : (
+                <span className="text-sm text-white/30">Selecionar</span>
+              )}
+              <ChevronRight className="w-4 h-4 text-white/40 shrink-0" />
+            </button>
+            {metrics.map(({ label, value, set }) => (
               <div key={label}>
+                <div className="h-px bg-white/10 mb-3" />
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-white/60">{label}</span>
+                  <span className="text-sm text-white/60">{label}</span>
                   <input
                     type="number"
-                    className="bg-transparent text-xs text-white/80 text-right outline-none w-24 placeholder:text-white/30"
+                    className="bg-transparent text-sm text-white/80 text-right outline-none w-24 placeholder:text-white/30"
                     placeholder="—"
                     value={value}
                     onChange={(e) => set(e.target.value)}
                   />
                 </div>
-                {i < metrics.length - 1 && <div className="h-px bg-white/10 mt-3" />}
               </div>
             ))}
           </div>
 
+          {/* Botões de atividade */}
+          <div className="bg-[#111] border border-white/10 rounded-2xl flex flex-col">
+            <button
+              onClick={() => setShowActivityPicker(true)}
+              className="flex items-center justify-center gap-2 px-4 py-3.5 text-sm text-white/80 hover:text-white"
+            >
+              <Plus className="w-4 h-4" /> Adicionar atividade
+            </button>
+            <div className="h-px bg-white/10 mx-4" />
+            <button
+              disabled
+              className="flex items-center justify-center gap-2 px-4 py-3.5 text-sm text-white/30 cursor-not-allowed"
+            >
+              <Watch className="w-4 h-4" /> Adicionar do dispositivo
+            </button>
+          </div>
+
         </div>
       </ScrollArea>
+
+      {/* Seletor de atividade */}
+      <AnimatePresence>
+        {showActivityPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-10 bg-black/70 backdrop-blur-sm flex items-end"
+            onClick={() => setShowActivityPicker(false)}
+          >
+            <motion.div
+              initial={{ y: 40 }}
+              animate={{ y: 0 }}
+              exit={{ y: 40 }}
+              className="w-full bg-[#111] border-t border-white/10 rounded-t-3xl p-5 pb-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-[10px] uppercase tracking-widest text-white/40 mb-3">Selecione a atividade</p>
+              <div className="flex flex-col gap-1">
+                {availableSports.map((sport) => (
+                  <button
+                    key={sport.id}
+                    onClick={() => { setSelectedSportId(sport.id); setShowActivityPicker(false); }}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-colors ${
+                      selectedSportId === sport.id
+                        ? "bg-banana/20 border border-banana/40"
+                        : "hover:bg-white/5 border border-transparent"
+                    }`}
+                  >
+                    <span className="text-lg">{sport.icon}</span>
+                    <span className={`text-sm font-medium flex-1 ${selectedSportId === sport.id ? "text-banana" : "text-white/80"}`}>
+                      {sport.name}
+                    </span>
+                    {selectedSportId === sport.id && <Check className="w-4 h-4 text-banana" />}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
